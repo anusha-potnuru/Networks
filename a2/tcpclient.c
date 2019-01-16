@@ -64,7 +64,7 @@ int main()
 
 	printf("Enter file name:\n");
 	scanf("%s", buf);
-	printf("%s\n",buf);
+	printf("Given file name is : %s\n\n",buf);
 
 	send(sockfd, buf, strlen(buf) + 1, 0);
 
@@ -88,16 +88,17 @@ int main()
 	}
 	int x,sz;
 	for (int i = 0; i < 100; ++i) buf[i] = '\0';
-	int bytecount =0,wordcount=0, k;
-	char* tok;
+	int bytecount =0,wordcount=0, k=1;
+	char* tok, *lasttok, buf1[200];
+	lasttok = "";
 	// char temp[100];
-	char s[] = {'\t', ' ', ',', ';',':', '.'};
+	char s[] = {'\t', ' ', ',', ';',':', '.', '\n'};
 	while(1)
 	{
 		x = recv(sockfd,buf, 100,0);
 		sz = x;	
 		bytecount = bytecount + strlen(buf);	
-		printf("BUFFER IS: \n %d %s\n", x, buf);
+		printf("BUFFER IS: (%d size)\n%s\n", x, buf);
 		if(x>0)
 		{
 			// strcpy(temp, buf);
@@ -105,24 +106,41 @@ int main()
 			{
 				temp[i] = buf[i];
 			}
-			// if (write(fd, buf, strlen(buf))==-1)
-			// {
-			// 	perror("write error");
-			// }
-			tok = strtok(buf, s);
+
+			// printf("lasttok is %s\n", lasttok );
+			
+			
+			if(lasttok[0]!='\0')
+			{
+				wordcount--; 
+				strcpy(buf1, lasttok);
+				strcat(buf1, buf);
+				printf("New BUFFER is \n%s\n",buf1);
+				tok = strtok(buf1, s);
+			}
+			else
+			{
+				tok = strtok(buf, s);
+			}
+
+			// tok = strtok(buf1, s);
+			printf("Tokens are: \n");
 			while(tok!=0)
 			{
 				wordcount++;
-				printf("%s ",tok );
+				printf("%s ",tok);
+				lasttok = strdup(tok);
 				tok = strtok(0, s);
 			}
-			printf("\n");
-			k=0;
-			while(strchr(s, temp[sz-k]) == NULL)
-			{
-				k++;
-			}
-			if(write(fd, temp, sz+1)==-1)
+			printf("\nlast token is %s\n", lasttok);
+			printf("\n\n");
+			if(strchr(s, temp[sz-1]))
+			{ // ending letter not in delimiter
+				lasttok = "";
+			} // remove last token as word, count
+
+
+			if(write(fd, temp, sz)==-1)
 			{
 				perror("write file error");
 			}
@@ -135,6 +153,7 @@ int main()
 		}
 		else
 			perror("error");
+
 		for (int i = 0; i < 100; ++i) buf[i] = '\0';
 	}
 
