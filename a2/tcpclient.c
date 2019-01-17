@@ -96,8 +96,8 @@ int main()
 	while(1)
 	{
 		x = recv(sockfd,buf, 100,0);
-		sz = x;	
-		bytecount = bytecount + strlen(buf);	
+		// sz = x;	
+		bytecount = bytecount + x;	
 		printf("BUFFER IS: (%d size)\n%s\n", x, buf);
 		if(x>0)
 		{
@@ -133,14 +133,17 @@ int main()
 				tok = strtok(0, s);
 			}
 			printf("\nlast token is %s\n", lasttok);
+			printf("wordcount: %d\n", wordcount );
 			printf("\n\n");
-			if(strchr(s, temp[sz-1]))
+
+
+			if(strchr(s, temp[x-1]))
 			{ // ending letter not in delimiter
-				lasttok = "";
+				strcpy(lasttok,"");
 			} // remove last token as word, count
 
 
-			if(write(fd, temp, sz)==-1)
+			if(write(fd, temp, x)==-1)
 			{
 				perror("write file error");
 			}
