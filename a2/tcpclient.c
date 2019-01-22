@@ -21,7 +21,8 @@ int main()
 	struct sockaddr_in	serv_addr;
 
 	int i,n;
-	char buf[100], temp[100];
+	int k=50 //chunk size
+	char buf[k], temp[k];
 
 	/* Opening a socket is exactly similar to the server process */
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -68,7 +69,7 @@ int main()
 
 	send(sockfd, buf, strlen(buf) + 1, 0);
 
-	// for(i=0; i < 100; i++) buf[i] = '\0';
+	// for(i=0; i < k; i++) buf[i] = '\0';
 	// printf("%s\n",buf );
 	// n = recv(sockfd, temp, 50  , 0);
 	// printf("%s %d\n", temp,n);
@@ -86,23 +87,24 @@ int main()
 	{
 		perror("file use error");
 	}
+
 	int x,sz;
-	for (int i = 0; i < 100; ++i) buf[i] = '\0';
+	for (int i = 0; i < k; ++i) buf[i] = '\0';
 	int bytecount =0,wordcount=0, k=1;
 	char* tok, *lasttok, buf1[200];
 	lasttok = "";
-	// char temp[100];
+	// char temp[k];
 	char s[] = {'\t', ' ', ',', ';',':', '.', '\n'};
 	while(1)
 	{
-		x = recv(sockfd,buf, 100,0);
+		x = recv(sockfd,buf, k,0);
 		// sz = x;	
 		bytecount = bytecount + x;	
 		printf("BUFFER IS: (%d size)\n%s\n", x, buf);
 		if(x>0)
 		{
 			// strcpy(temp, buf);
-			for (int i = 0; i < 100; ++i)
+			for (int i = 0; i < k; ++i)
 			{
 				temp[i] = buf[i];
 			}
@@ -157,7 +159,7 @@ int main()
 		else
 			perror("error");
 
-		for (int i = 0; i < 100; ++i) buf[i] = '\0';
+		for (int i = 0; i < k; ++i) buf[i] = '\0';
 	}
 
 	printf("The file transfer is successful. Size of the file = %d bytes, no. of words = %d\n", bytecount, wordcount);
