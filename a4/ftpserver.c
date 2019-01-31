@@ -30,7 +30,7 @@ int max(int x, int y)
 int main() 
 { 
     int PORTY, start=0;
-    int listenfd, i, newsockfd; 
+    int listenfd, i, newsockfd, datasockfd; 
     int clilen;
     char buf[MAXLINE]; 
     pid_t childpid; 
@@ -70,7 +70,7 @@ int main()
 
         while(1)
         {     
-            // printf("receive\n");
+            printf("<\n");
             for(i=0; i < 100; i++) buf[i] = '\0';
             int index =0;
             int t = recv(newsockfd, buf+index, 100, 0);
@@ -91,46 +91,104 @@ int main()
             token = strtok(buf, " ");
             while(token!=NULL)
             {
-                if(strcmp(token, "PORT")==0)
+                if(strcmp(token, "port")==0)
                 {
                     if(start==1)
                     {
-                        int tosend = htons(503);
+                        int tosend = htonl(503);
                         send(newsockfd, &tosend, sizeof(tosend),0 );
                         break;
                     }
                     if(start==0)
                         start=1;
                     token = strtok(NULL, " ");
-                    int x = atoi(token);
-                    if(1024<= x && x<= 65535)
+                    if(token!= NULL)
                     {
-                        PORTY = x;
-                        int tosend = htons(200);
-                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                        int x = atoi(token);
+                        if(1024<= x && x<= 65535)
+                        {
+                            PORTY = x;
+                            int tosend = htonl(200);
+                            send(newsockfd, &tosend, sizeof(tosend),0 );
+                        }
+                        else
+                        {
+                            int tosend = htonl(550);
+                            send(newsockfd, &tosend, sizeof(tosend),0 );
+                        }
                     }
                     else
                     {
-                        int tosend = htons(550);
-                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                        break;
+                    }
+
+                }
+                else if(strcmp(token, "get")==0)
+                {
+                    int childpid;
+                    if((childpid=fork())==0)
+                    {
+                        close(newsockfd);
+                        int         sockfd ,n, received_code;
+                        struct sockaddr_in  serv_addr;
+
+                        if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
+                        {
+                            perror("Unable to create socket\n");
+                            exit(0);
+                        }
+
+                        serv_addr.sin_family    = AF_INET;
+                        inet_aton("127.0.0.1", &serv_addr.sin_addr);
+                        serv_addr.sin_port  = htons(PORTY);
+
+                        if ((connect(sockfd, (struct sockaddr *) &serv_addr,
+                                            sizeof(serv_addr))) < 0) {
+                            perror("Unable to connect to server\n");
+                            exit(0);
+                        }
+                        char temp[100];
+                        strcpy(temp, "I have received it");
+                        send(newsockfd, temp, 100, 0);
+                        exit(0);
+
+                    }
+                    else
+                    {
+
+                        int status;
+                        waitpid(childpid, &status, 0);
+                        printf("back to parent\n");
+
+                        if(WIFEXITED(status))
+                        {
+                            int tosend = htonl(250);
+                            send(newsockfd, &tosend, sizeof(tosend),0 );
+                            printf("child normal\n");
+                        }
+                        else
+                        {
+                            int tosend = htonl(550);
+                            send(newsockfd, &tosend, sizeof(tosend),0 );
+                            printf("child not normal\n");
+                        }
                     }
                 }
 
-                if(strcmp(token, "get")==0)
+                else
                 {
-                    char temp[100];
-                    strcpy(temp, "I have received it");
-                    send(newsockfd, temp, 100, 0);
+                    break;
                 }
-                token = strtok(NULL, " ");            
 
+                token = strtok(NULL, " ");            
             }
+
         }
 
         close(newsockfd);
             
     }
-    
+
     close(listenfd);
 
 } 
