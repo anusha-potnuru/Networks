@@ -16,7 +16,7 @@
 #include <netdb.h>
 extern int h_errno;
 
-#define PORT 20000 
+// #define PORTX 50000 
 #define MAXLINE 1024 
 
 int max(int x, int y) 
@@ -29,8 +29,10 @@ int max(int x, int y)
 
 int main() 
 { 
-    int listenfd, connfd, udpfd, nready, maxfdp1; 
-    char buffer[MAXLINE]; 
+    int PORTY, start=0;
+    int listenfd, i, newsockfd; 
+    int clilen;
+    char buf[MAXLINE]; 
     pid_t childpid; 
     fd_set rset; 
     ssize_t n; 
@@ -38,7 +40,7 @@ int main()
     const int on = 1; 
     struct sockaddr_in cliaddr, servaddr; 
     char* message = "Hello Client"; 
-    void sig_chld(int);
+
     int k=10; 
   
     /* create listening TCP socket */
@@ -47,75 +49,88 @@ int main()
 
     servaddr.sin_family = AF_INET; 
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY); 
-    servaddr.sin_port = htons(PORT); 
+    servaddr.sin_port = htons(50000); 
   
     // binding server addr structure to listenfd 
     bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)); 
     listen(listenfd, 2); 
-  
-    /* create UDP socket */
-    udpfd = socket(AF_INET, SOCK_DGRAM, 0); 
 
-    // if ( udpfd < 0 ) { 
-    //     perror("socket creation failed"); 
-    //     exit(EXIT_FAILURE); 
-    // }
+  
+    while (1) 
+    {
 
-    // binding server addr structure to udp sockfd 
-    bind(udpfd, (struct sockaddr*)&servaddr, sizeof(servaddr)); 
-  
-    // clear the descriptor set 
-    FD_ZERO(&rset); 
-  
-    // get maxfd 
-    maxfdp1 = max(listenfd, udpfd) + 1; 
-    for (;;) 
-    { 
-        FD_ZERO(&rset); 
-        // set listenfd and udpfd in readset 
-        FD_SET(listenfd, &rset); 
-        FD_SET(udpfd, &rset); 
-  
-        // select the ready descriptor 
-        nready = select(maxfdp1, &rset, 0, 0, 0); 
-  
-        // if tcp socket is readable then handle 
-        // it by accepting the connection 
-        if (FD_ISSET(listenfd, &rset)) 
-        { 
-            len = sizeof(cliaddr); 
-            connfd = accept(listenfd, (struct sockaddr*)&cliaddr, &len); 
-            if ((childpid = fork()) == 0) 
-            { 
-                int i;
-                close(listenfd); 
-                for (i = 0; i < MAXLINE; ++i) buffer[i] = '\0';
-                recv(connfd, buffer, sizeof(buffer)+1, 0); 
-                if(strcmp(buffer, "Request for words")==0)
-                {
+        clilen = sizeof(cliaddr);
+        newsockfd = accept(listenfd, (struct sockaddr *) &cliaddr,
+                    (socklen_t*)&clilen) ;
+
+        if (newsockfd < 0) {
+            printf("Accept error\n");
+            exit(0);
+        } 
+
+        while(1)
+        {     
+            // printf("receive\n");
+            for(i=0; i < 100; i++) buf[i] = '\0';
+            int index =0;
+            int t = recv(newsockfd, buf+index, 100, 0);
+            printf("t is %d\n", t );
+            if(t==0)
+                break;
+            // while(1)
+            // {
+            //     int t = recv(newsockfd, buf+index, 100, 0);
+            //     if(t==0)
+            //         break;
+            //     index = index + t;
+            // }
             
+            printf("%s\n", buf);
+
+            char* token;
+            token = strtok(buf, " ");
+            while(token!=NULL)
+            {
+                if(strcmp(token, "PORT")==0)
+                {
+                    if(start==1)
+                    {
+                        int tosend = htons(503);
+                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                        break;
+                    }
+                    if(start==0)
+                        start=1;
+                    token = strtok(NULL, " ");
+                    int x = atoi(token);
+                    if(1024<= x && x<= 65535)
+                    {
+                        PORTY = x;
+                        int tosend = htons(200);
+                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                    }
+                    else
+                    {
+                        int tosend = htons(550);
+                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                    }
                 }
 
-                close(connfd); 
-                exit(0); 
-            }
-            close(connfd); 
-            
-        } 
-        // if udp socket is readable receive the message. 
-        if (FD_ISSET(udpfd, &rset)) 
-        {
-            if(fork()==0)
-            { 
-                len = sizeof(cliaddr); 
-                bzero(buffer, sizeof(buffer)); 
-                printf("\nMessage from UDP client: "); 
-                n = recvfrom(udpfd, buffer, sizeof(buffer), 0, 
-                             (struct sockaddr*)&cliaddr, &len); 
-                printf("%s\n",buffer );
-                
-            }                                 
-        } 
+                if(strcmp(token, "get")==0)
+                {
+                    char temp[100];
+                    strcpy(temp, "I have received it");
+                    send(newsockfd, temp, 100, 0);
+                }
+                token = strtok(NULL, " ");            
 
-    } 
+            }
+        }
+
+        close(newsockfd);
+            
+    }
+    
+    close(listenfd);
+
 } 
