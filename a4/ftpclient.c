@@ -22,11 +22,11 @@ int main()
 	int			sockfd ,n, received_code;
 	struct sockaddr_in	serv_addr;
 
-	int i;
+	int i, start=0;
 	char buf[100];
 	char command[MAXLINE];
 
-	int PORTY = 55000;
+	int PORTY;
 
 	/* Opening a socket is exactly similar to the server process */
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
@@ -51,6 +51,9 @@ int main()
 		printf(">");
 		fgets(command, MAXLINE, stdin);
         command[strlen(command)-1] = '\0';
+
+        printf("%s\n", command);
+
         if(strcmp(command, "quit")==0)
         	break;
         printf("\n");
@@ -59,6 +62,29 @@ int main()
         // printf("in client: %s\n", command );
         int k = send(sockfd, command, strlen(command) + 1, 0);
         char* token = strtok(command, " ");
+
+        printf("token: %s\n", token );
+        if(strcmp(token, "port")==0)
+        {
+        	if(start==0)
+        	{
+        		token = strtok(NULL, " ");
+        		if(token != NULL)
+        		{
+        			PORTY = atoi(token);
+        			printf("port set to %d\n",PORTY );
+        		}
+        		else
+        			printf("error\n");
+        		start =1;
+        	}
+        	else
+        	{
+        		printf("port already set\n");
+        	}
+
+        }
+
         if(strcmp(token, "get")==0)
         {
         	int childpid;
@@ -73,6 +99,11 @@ int main()
 			    struct sockaddr_in cliaddr, servaddr; 
 
 				listenfd = socket(AF_INET, SOCK_STREAM, 0); 
+
+				int enable = 1;
+				if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+				    perror("setsockopt(SO_REUSEADDR) failed");
+
 			    bzero(&servaddr, sizeof(servaddr)); 
 
 			    servaddr.sin_family = AF_INET; 
@@ -81,13 +112,14 @@ int main()
 			  
 			    // binding server addr structure to listenfd 
 			    bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)); 
-			    listen(listenfd, 1);    
+			    if(listen(listenfd, 1)<0)
+			    	perror("error on listen");    
 
 			    clilen = sizeof(cliaddr);
 		        newsockfd = accept(listenfd, (struct sockaddr *) &cliaddr,
 		                    (socklen_t*)&clilen) ;
 
-		        if (newsockfd < 0) 
+		        if ( newsockfd < 0) 
 		        {
 		            printf("Accept error\n");
 		            exit(0);
@@ -96,41 +128,29 @@ int main()
 		        int t = recv(newsockfd, buf, 100, 0);
 		        if(t==0)
 		        	break;
-
 		        printf("buf: %s\n", buf );
 
 		        close(newsockfd);
 	
 			    close(listenfd);
-
-			    exit(0);
 			    printf("child exit here\n");
+			    exit(0);			    
 
         	}
+
         	else
-        	{
-        		
+        	{        		
         		int status;
-        		waitpid(childpid, &status, 0);
-        		// printf("child ended\n");
-        		// printf("%d\n", status);
-        		// if (WIFEXITED(status)) 
-        		// {
-        		// 	printf("exited with status: %d\n", WEXITSTATUS(stat));
-        			
-        		// }
-        		// else
-        		// {
-        		// 	printf("error\n");
-        		// }
-        		
+        		waitpid(childpid, &status, 0);     
+
         	}
 
         }
 
         int n = recv(sockfd, &received_code, sizeof(received_code), 0);
         printf("%d\n",ntohl(received_code));
-
+        if(ntohl(received_code) == 421)
+        	break;
 		
 	}
 

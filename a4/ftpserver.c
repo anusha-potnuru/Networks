@@ -1,4 +1,13 @@
 // Server program 
+
+
+// setsockopt call - for address inuse error, port can reused, set before it-- DO
+
+// int part, breakup -- 
+// bug - server runs before, put sleep
+// bug: last packet left in n/w and server closed, put sleep in client
+
+
 #include <arpa/inet.h> 
 #include <errno.h> 
 #include <netinet/in.h> 
@@ -30,7 +39,7 @@ int max(int x, int y)
 int main() 
 { 
     int PORTY, start=0;
-    int listenfd, i, newsockfd, datasockfd; 
+    int listenfd, i, newsockfd, datasockfd, flag=0; 
     int clilen;
     char buf[MAXLINE]; 
     pid_t childpid; 
@@ -76,15 +85,9 @@ int main()
             int t = recv(newsockfd, buf+index, 100, 0);
             printf("t is %d\n", t );
             if(t==0)
-                break;
-            // while(1)
-            // {
-            //     int t = recv(newsockfd, buf+index, 100, 0);
-            //     if(t==0)
-            //         break;
-            //     index = index + t;
-            // }
-            
+                break; // parts
+            sleep(1);
+
             printf("%s\n", buf);
 
             char* token;
@@ -121,7 +124,24 @@ int main()
                     {
                         break;
                     }
+                }
+                else if(strcmp(token, "cd")==0)
+                {
 
+                    token = strtok(NULL, "\0");
+                    if(chdir(token)!=0)
+                    {
+                        perror("cd not successful");
+                        int tosend = htonl(501);
+                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                    }
+                    else
+                    {
+                        printf("cd successful\n");
+                        int tosend = htonl(200);
+                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                    }
+                    break;
                 }
                 else if(strcmp(token, "get")==0)
                 {
@@ -129,8 +149,10 @@ int main()
                     if((childpid=fork())==0)
                     {
                         close(newsockfd);
-                        int         sockfd ,n, received_code;
-                        struct sockaddr_in  serv_addr;
+                        sleep(1);
+
+                        int  sockfd ,n, received_code;
+                        struct sockaddr_in  serv_addr;                        
 
                         if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
                         {
@@ -143,19 +165,23 @@ int main()
                         serv_addr.sin_port  = htons(PORTY);
 
                         if ((connect(sockfd, (struct sockaddr *) &serv_addr,
-                                            sizeof(serv_addr))) < 0) {
+                                            sizeof(serv_addr))) < 0) 
+                        {
                             perror("Unable to connect to server\n");
                             exit(0);
                         }
+
                         char temp[100];
                         strcpy(temp, "I have received it");
-                        send(newsockfd, temp, 100, 0);
-                        exit(0);
+                        send(sockfd, temp, 100, 0);
+
+                        close(sockfd);
+
+                        exit(2);
 
                     }
                     else
                     {
-
                         int status;
                         waitpid(childpid, &status, 0);
                         printf("back to parent\n");
@@ -165,6 +191,7 @@ int main()
                             int tosend = htonl(250);
                             send(newsockfd, &tosend, sizeof(tosend),0 );
                             printf("child normal\n");
+                            
                         }
                         else
                         {
@@ -173,6 +200,13 @@ int main()
                             printf("child not normal\n");
                         }
                     }
+                }
+                else if(strcmp(token, "quit")==0)
+                {
+                    int tosend = htonl(421);
+                    send(newsockfd, &tosend, sizeof(tosend),0 );
+                    flag=1;
+                    break;
                 }
 
                 else
@@ -183,7 +217,11 @@ int main()
                 token = strtok(NULL, " ");            
             }
 
+            if(flag==1)
+                break;
+
         }
+        
 
         close(newsockfd);
             
@@ -191,4 +229,4 @@ int main()
 
     close(listenfd);
 
-} 
+}
