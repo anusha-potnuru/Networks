@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 // #define PORTX 50000
 #define MAXLINE 80
@@ -48,17 +49,14 @@ int main()
 
 	while(1)
 	{
-		printf(">");
+		printf("> ");
 		fgets(command, MAXLINE, stdin);
         command[strlen(command)-1] = '\0';
 
-        printf("%s\n", command);
-
-        if(strcmp(command, "quit")==0)
-        	break;
-        printf("\n");
+        
         if(strlen(command)==0)
             continue;
+        // printf("\n");
         // printf("in client: %s\n", command );
         int k = send(sockfd, command, strlen(command) + 1, 0);
         char* token = strtok(command, " ");
@@ -85,9 +83,16 @@ int main()
 
         }
 
-        if(strcmp(token, "get")==0)
+        if(strcmp(token, "get")==0 || strcmp(token, "put")==0)
         {
-        	int childpid;
+        	int childpid, gp;
+        	if(strcmp(token, "get")==0)
+        		gp =1;
+        	else
+        		gp =0;
+
+        	token = strtok(NULL, "\n");
+
         	if((childpid=fork())==0)
         	{
 
@@ -125,10 +130,57 @@ int main()
 		            exit(0);
 		        } 
 
-		        int t = recv(newsockfd, buf, 100, 0);
-		        if(t==0)
-		        	break;
-		        printf("buf: %s\n", buf );
+		        if(gp)
+				{
+			        int fd = open(token, O_WRONLY| O_CREAT|O_TRUNC, S_IRWXU);
+			        while(1)
+			        {
+			        	int t = recv(newsockfd, buf, 100, 0);
+				        if(t==0)
+				        	break;
+				        else if(t>0)
+				        {
+				        	write(fd, buf, t);
+				        	printf("buf: %s\n", buf );
+
+				        }
+				        else
+				        	perror("receive error");
+				        for(i=0; i<100; i++)
+				        	buf[i] = '\0';
+
+			        }	
+		        }
+		        else
+		        {
+		        	char temp[100];
+                    int fd= open(token, O_RDONLY);
+                    if(fd==-1)
+                    {
+                        perror("file open error");
+                        exit(0);
+                    }
+                    else
+                    {
+                        char temp[100];
+                        while(1)
+                        {
+                            int t = read(fd, temp, 100);
+                            if(t==0)
+                            {
+                                break;
+                            }
+                            else if(t>0)
+                                send(newsockfd, temp, t, 0);
+                            else
+                                perror("file read error\n");
+                            bzero(&temp, sizeof(temp));                        
+
+                        }
+                    }
+                    close(fd);
+
+		        }
 
 		        close(newsockfd);
 	
@@ -137,20 +189,24 @@ int main()
 			    exit(0);			    
 
         	}
-
         	else
         	{        		
         		int status;
-        		waitpid(childpid, &status, 0);     
-
+        		//waitpid(childpid, &status, 0);    
+        		int n = recv(sockfd, &received_code, sizeof(received_code), 0);
+		        printf("%d\n",ntohl(received_code));
+		        if(ntohl(received_code) == 550)
+		        	kill(childpid, SIGKILL);
         	}
 
         }
-
-        int n = recv(sockfd, &received_code, sizeof(received_code), 0);
-        printf("%d\n",ntohl(received_code));
-        if(ntohl(received_code) == 421)
-        	break;
+        else
+        {
+	        int n = recv(sockfd, &received_code, sizeof(received_code), 0);
+	        printf("%d\n",ntohl(received_code));
+	        if(ntohl(received_code) == 421)
+	        	break;
+    	}
 		
 	}
 

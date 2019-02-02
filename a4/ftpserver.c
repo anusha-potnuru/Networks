@@ -1,5 +1,7 @@
 // Server program 
 
+//check port, quit - not working
+
 
 // setsockopt call - for address inuse error, port can reused, set before it-- DO
 
@@ -38,7 +40,7 @@ int max(int x, int y)
 
 int main() 
 { 
-    int PORTY, start=0;
+    int PORTY;
     int listenfd, i, newsockfd, datasockfd, flag=0; 
     int clilen;
     char buf[MAXLINE]; 
@@ -54,6 +56,13 @@ int main()
   
     /* create listening TCP socket */
     listenfd = socket(AF_INET, SOCK_STREAM, 0); 
+
+
+    int enable = 1;
+    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+        perror("setsockopt(SO_REUSEADDR) failed");
+
+
     bzero(&servaddr, sizeof(servaddr)); 
 
     servaddr.sin_family = AF_INET; 
@@ -67,12 +76,13 @@ int main()
   
     while (1) 
     {
-
+        int start =0;
         clilen = sizeof(cliaddr);
         newsockfd = accept(listenfd, (struct sockaddr *) &cliaddr,
                     (socklen_t*)&clilen) ;
 
-        if (newsockfd < 0) {
+        if (newsockfd < 0) 
+        {
             printf("Accept error\n");
             exit(0);
         } 
@@ -86,7 +96,6 @@ int main()
             printf("t is %d\n", t );
             if(t==0)
                 break; // parts
-            sleep(1);
 
             printf("%s\n", buf);
 
@@ -143,13 +152,39 @@ int main()
                     }
                     break;
                 }
-                else if(strcmp(token, "get")==0)
+                else if(strcmp(token, "get")==0 || strcmp(token, "put") ==0 )
                 {
-                    int childpid;
-                    if((childpid=fork())==0)
+                    int childpid, fntexist=0, gp, fd;
+                    if(strcmp(token, "get")==0)
+                        gp=1;
+                    else
+                        gp =0;
+                    token = strtok(NULL, "\n");
+                    if(gp)
+                    {
+                        fd = open(token, O_RDONLY);
+                        if(fd==-1)
+                        {
+                            perror("file open error");
+                            int tosend = htonl(550);
+                            send(newsockfd, &tosend, sizeof(tosend),0 );                        
+                        }
+                    }
+                    else
+                    {
+                        int fd = open(token, O_WRONLY| O_CREAT|O_TRUNC, S_IRWXU);
+                        if(fd<0)
+                        {
+                            perror("file create error");
+                            int tosend = htonl(550);
+                            send(newsockfd, &tosend, sizeof(tosend),0 ); 
+
+                        }
+                    }
+
+                    if(fd!=-1 && (childpid=fork())==0)
                     {
                         close(newsockfd);
-                        sleep(1);
 
                         int  sockfd ,n, received_code;
                         struct sockaddr_in  serv_addr;                        
@@ -164,17 +199,54 @@ int main()
                         inet_aton("127.0.0.1", &serv_addr.sin_addr);
                         serv_addr.sin_port  = htons(PORTY);
 
+                        sleep(1);
+
                         if ((connect(sockfd, (struct sockaddr *) &serv_addr,
                                             sizeof(serv_addr))) < 0) 
                         {
                             perror("Unable to connect to server\n");
                             exit(0);
                         }
+                        if(gp)
+                        { // if get
 
-                        char temp[100];
-                        strcpy(temp, "I have received it");
-                        send(sockfd, temp, 100, 0);
+                            char temp[100];
+                            while(1)
+                            {
+                                int t = read(fd, temp, 100);
+                                if(t==0)
+                                {
+                                    break;
+                                }
+                                else if(t>0)
+                                    send(sockfd, temp, t, 0);
+                                else
+                                    perror("file read error\n");                                
+                            }
 
+                        }
+                        else
+                        {
+                            while(1)
+                            {
+                                int t = recv(sockfd, buf, 100, 0);
+                                if(t==0)
+                                    break;
+                                else if(t>0)
+                                {
+                                    write(fd, buf, t);
+                                    printf("buf: %s\n", buf );
+
+                                }
+                                else
+                                    perror("receive error");
+                                for(i=0; i<100; i++)
+                                    buf[i] = '\0';
+                            }
+
+                        }
+
+                        close(fd);
                         close(sockfd);
 
                         exit(2);
@@ -182,23 +254,26 @@ int main()
                     }
                     else
                     {
-                        int status;
+                        int status, tosend=0;
                         waitpid(childpid, &status, 0);
-                        printf("back to parent\n");
+                        close(fd);
 
+                        printf("back to parent\n");
                         if(WIFEXITED(status))
                         {
-                            int tosend = htonl(250);
-                            send(newsockfd, &tosend, sizeof(tosend),0 );
-                            printf("child normal\n");
-                            
+                            if( WEXITSTATUS(status) ==0 )
+                                tosend = htonl(250);       
+                            else if( WEXITSTATUS(status) ==0 )
+                                tosend = htonl(550);                                                        
                         }
                         else
                         {
-                            int tosend = htonl(550);
-                            send(newsockfd, &tosend, sizeof(tosend),0 );
+                            tosend = htonl(550);
                             printf("child not normal\n");
                         }
+                        send(newsockfd, &tosend, sizeof(tosend),0 );
+                        printf("sent: %d\n", tosend);
+
                     }
                 }
                 else if(strcmp(token, "quit")==0)
@@ -214,10 +289,9 @@ int main()
                     break;
                 }
 
-                token = strtok(NULL, " ");            
             }
 
-            if(flag==1)
+            if(flag==1) // quit case
                 break;
 
         }
