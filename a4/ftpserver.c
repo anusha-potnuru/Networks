@@ -214,6 +214,8 @@ int main()
 						inet_aton("127.0.0.1", &serv_addr.sin_addr);
 						serv_addr.sin_port  = htons(PORTY);
 
+						sleep(1); // gives time for client to create it's data and wait
+
 						if ((connect(sockfd, (struct sockaddr *) &serv_addr,
 											sizeof(serv_addr))) < 0) 
 						{
@@ -269,22 +271,39 @@ int main()
 								v2 = recv(sockfd, &len, sizeof(len), 0);
 								while(1)
 								{
-									t = recv(sockfd, temp+index, len, 0);
-									if(t==len)
+									if(len>BLOCKSIZE)
 									{
-										write(fd, temp, strlen(temp));
-										break;
-									}
-									else if(t<len)
-									{
-										index = index+t;
-										len = len-t;
+										t = recv(sockfd, temp, BLOCKSIZE, 0);
+										if(t>0)
+										{
+											write(fd, temp, t);
+											len = len-t;
+										}
+										else
+											perror("receive error");
+
 									}
 									else
-										perror("file transmission error");
+									{
+										t = recv(sockfd, temp, len , 0);
+										if(t==len)
+										{
+											write(fd, temp, t);
+											break;
+										}
+										else if(t<len)
+										{
+											len=len-t;
+										}
+										else
+											perror("receive error");
+
+									}
+									for (i = 0; i < BLOCKSIZE; ++i)
+									{
+										temp[i]='\0';
+									}
 								}
-								for(i=0; i<100; i++)
-									temp[i] = '\0';
 							}
 
 						}
@@ -298,7 +317,9 @@ int main()
 						int status, tosend=0;
 						waitpid(childpid, &status, 0);
 						close(fd);
-
+						if(gp)
+							close(fd1);
+						
 						if(WIFEXITED(status))
 						{
 							if( WEXITSTATUS(status) ==2)

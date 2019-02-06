@@ -225,6 +225,7 @@ int main()
 						}
 					}
 					close(fd);
+					close(fd1);
 
 				}
 
