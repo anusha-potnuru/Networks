@@ -235,7 +235,7 @@ int main()
 								{
 									perror("file read error\n");
 									exit(0);   
-								}                             
+								}
 							}
 
 						}
