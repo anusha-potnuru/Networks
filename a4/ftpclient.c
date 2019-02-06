@@ -238,7 +238,7 @@ int main()
 			}
 			else
 			{        		
-				int status;
+				
 				//waitpid(childpid, &status, 0);    
 				int n = recv(sockfd, &received_code, sizeof(received_code), 0);
 				printf("%d\n",ntohl(received_code));

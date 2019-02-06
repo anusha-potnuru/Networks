@@ -243,7 +243,7 @@ int main()
 								}
 								else if(t>0)
 								{
-									printf("%c %hd %s\n",c,t,temp );
+									// printf("%c %hd %s\n",c,t,temp );
 									send(sockfd, &c, sizeof(c), 0);
 									send(sockfd, &t, sizeof(t), 0);
 									send(sockfd, temp, t, 0);
@@ -254,6 +254,8 @@ int main()
 									exit(0);   
 								}
 							}
+							// close(fd);
+							// close(fd1); // close in all processes
 
 						}
 						else
@@ -309,6 +311,7 @@ int main()
 						}
 
 						close(sockfd);
+						// close(fd);
 						exit(2);
 					}
 					
@@ -316,6 +319,7 @@ int main()
 					{
 						int status, tosend=0;
 						waitpid(childpid, &status, 0);
+						
 						close(fd);
 						if(gp)
 							close(fd1);
@@ -324,19 +328,20 @@ int main()
 						{
 							if( WEXITSTATUS(status) ==2)
 							{
-								tosend = htonl(250);       
+								tosend = htonl(250);
+								printf("data transfer successful\n");       
 							}
 							else if( WEXITSTATUS(status) ==0 )
 							{
 								printf("Error during transmission\n");
 								tosend = htonl(550); 
 							}
-							printf("child exit\n");                                                       
+							
 						}
 						else
 						{
 							tosend = htonl(550);
-							printf("child not normal\n");
+							printf("Error during transmission\n");
 						}
 						send(newsockfd, &tosend, sizeof(tosend),0 );
 						printf("sent: %d\n", ntohl(tosend));
