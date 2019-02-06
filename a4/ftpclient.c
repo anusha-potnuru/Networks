@@ -17,6 +17,7 @@
 
 // #define PORTX 50000
 #define MAXLINE 80
+#define BLOCKSIZE 100
 
 int main()
 {
@@ -132,30 +133,63 @@ int main()
 				if(gp)
 				{
 					int fd = open(token, O_WRONLY| O_CREAT|O_TRUNC, S_IRWXU);
-					char buf[100];
+					char buf[BLOCKSIZE];
+					short int len,t;
+					int v1,v2,index=0;
+					char c;
 					while(1)
 					{
-						int t = recv(newsockfd, buf, 100, 0);
-						if(t==0)
+						v1= recv(newsockfd, &c, 1,0);
+						if(v1==0)
 							break;
-						else if(t>0)
+						v2 = recv(newsockfd, &len, sizeof(len), 0);
+						index=0;
+						while(1)
 						{
-							write(fd, buf, t);
-							printf("buf: %s\n", buf );
+							if(len>BLOCKSIZE)
+							{
+								t = recv(newsockfd, buf, BLOCKSIZE, 0);
+								if(t>0)
+								{
+									write(fd, buf, t);
+									len = len-t;
+								}
+								else
+									perror("receive error");
 
-						}
-						else
-							perror("receive error");
-						for(i=0; i<100; i++)
-							buf[i] = '\0';
+							}
+							else
+							{
+								t = recv(newsockfd, buf, len , 0);
+								if(t==len)
+								{
+									write(fd, buf, t);
+									break;
+								}
+								else if(t<len)
+								{
+									len=len-t;
+								}
+								else
+									perror("receive error");
+
+							}
+							for (i = 0; i < BLOCKSIZE; ++i)
+							{
+								buf[i]='\0';
+							}
+						}						
+						
 					}	
 					close(fd);
 
 				}
 				else
 				{ // put case
-					char temp[100];
+					short int k;
+					char temp[100], temp1[100];
 					int fd= open(token, O_RDONLY);
+					int fd1= open(token, O_RDONLY);
 					if(fd==-1)
 					{
 						perror("file open error");
@@ -163,16 +197,28 @@ int main()
 					}
 					else
 					{
-
+						char c = 'M';
+						k = read(fd1, temp1,100);
 						while(1)
 						{
-							int t = read(fd, temp, 100);
+							bzero(temp, sizeof(temp));
+							short int t = read(fd, temp, 100);
+							k = read(fd1, temp1,100);
+							if(k==0)
+							{
+								c= 'L';
+							}
 							if(t==0)
 							{
 								break;
 							}
 							else if(t>0)
+							{
+								printf("%c %hd %s\n",c,t,temp );
+								send(newsockfd, &c, sizeof(c), 0);
+								send(newsockfd, &t, sizeof(t), 0);
 								send(newsockfd, temp, t, 0);
+							}
 							else
 								perror("file read error\n");
 

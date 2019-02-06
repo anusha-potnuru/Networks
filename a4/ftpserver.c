@@ -37,6 +37,7 @@ extern int h_errno;
 
 // #define PORTX 50000 
 #define MAXLINE 80
+#define BLOCKSIZE 100
 
 int max(int x, int y) 
 { 
@@ -58,7 +59,7 @@ int main()
 	socklen_t len; 
 	const int on = 1; 
 	struct sockaddr_in cliaddr, servaddr; 
-	char* message = "Hello Client"; 
+	char* message = "Hello Client";
 
 	int k=10; 
   
@@ -165,7 +166,7 @@ int main()
 				}
 				else if(strcmp(token, "get")==0 || strcmp(token, "put") ==0 )
 				{
-					int childpid, fntexist=0, gp, fd;
+					int childpid, fntexist=0, gp, fd, fd1;
 
 					if(strcmp(token, "get")==0)
 						gp=1;
@@ -176,6 +177,7 @@ int main()
 					if(gp)
 					{
 						fd = open(token, O_RDONLY);
+						fd1 = open(token, O_RDONLY);
 						if(fd==-1)
 						{
 							perror("file open error");
@@ -207,8 +209,8 @@ int main()
 							perror("Unable to create socket\n");
 							exit(0);
 						}
-
 						serv_addr.sin_family    = AF_INET;
+
 						inet_aton("127.0.0.1", &serv_addr.sin_addr);
 						serv_addr.sin_port  = htons(PORTY);
 
@@ -220,17 +222,30 @@ int main()
 						}
 						if(gp)
 						{  // if get
-
-							char temp[100];
+							short int k;
+							char temp[BLOCKSIZE], temp1[BLOCKSIZE];
+							char c = 'M';
+							k = read(fd1, temp1, BLOCKSIZE);
 							while(1)
 							{
-								int t = read(fd, temp, 100);
+								bzero(temp, sizeof(temp));
+								short int t = read(fd, temp, BLOCKSIZE);
+								k = read(fd1, temp1, BLOCKSIZE);
+								if(k==0)
+								{
+									c='L';
+								}
 								if(t==0)
 								{
 									break;
 								}
 								else if(t>0)
+								{
+									printf("%c %hd %s\n",c,t,temp );
+									send(sockfd, &c, sizeof(c), 0);
+									send(sockfd, &t, sizeof(t), 0);
 									send(sockfd, temp, t, 0);
+								}
 								else
 								{
 									perror("file read error\n");
@@ -240,25 +255,34 @@ int main()
 
 						}
 						else
-						{
+						{// put case
 							char temp[100];
+							short int t, len;
+							char c;
+							int index=0;
+							int v1,v2;
 							while(1)
 							{
-								int t = recv(sockfd, temp, 100, 0);
-								if(t==0)
+								v1 = recv(sockfd, &c, 1, 0);
+								if(v1==0)
 									break;
-								else if(t>0)
+								v2 = recv(sockfd, &len, sizeof(len), 0);
+								while(1)
 								{
-									write(fd, temp, t);
-									printf("buf: %s\n", temp );
-
+									t = recv(sockfd, temp+index, len, 0);
+									if(t==len)
+									{
+										write(fd, temp, strlen(temp));
+										break;
+									}
+									else if(t<len)
+									{
+										index = index+t;
+										len = len-t;
+									}
+									else
+										perror("file transmission error");
 								}
-								else
-								{
-									perror("receive error");
-									exit(0);
-								}
-
 								for(i=0; i<100; i++)
 									temp[i] = '\0';
 							}
