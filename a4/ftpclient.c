@@ -62,7 +62,6 @@ int main()
 		int k = send(sockfd, command, strlen(command) + 1, 0);
 		char* token = strtok(command, " ");
 
-		printf("command: %s\n", token );
 		if(strcmp(token, "port")==0)
 		{
 			if(start==0)
@@ -88,7 +87,7 @@ int main()
 			int childpid, gp;
 			if(strcmp(token, "get")==0)
 				gp =1;
-			else
+			else if(strcmp(token, "put")==0)
 				gp =0;
 
 			token = strtok(NULL, "\n");
@@ -106,7 +105,7 @@ int main()
 				listenfd = socket(AF_INET, SOCK_STREAM, 0); 
 
 				int enable = 1;
-				if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+				if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
 					perror("setsockopt(SO_REUSEADDR) failed");
 
 				bzero(&servaddr, sizeof(servaddr)); 
@@ -117,7 +116,7 @@ int main()
 			  
 				// binding server addr structure to listenfd 
 				bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)); 
-				if(listen(listenfd, 1)<0)
+				if(listen(listenfd, 1) < 0)
 					perror("error on listen");    
 
 				clilen = sizeof(cliaddr);
@@ -131,7 +130,7 @@ int main()
 				} 
 
 				if(gp)
-				{
+				{ // get case
 					int fd = open(token, O_WRONLY| O_CREAT|O_TRUNC, S_IRWXU);
 					char buf[BLOCKSIZE];
 					short int len,t;
@@ -186,8 +185,8 @@ int main()
 				}
 				else
 				{ // put case
-					short int k;
-					char temp[100], temp1[100];
+					short int k,t;
+					char temp[BLOCKSIZE], temp1[BLOCKSIZE];
 					int fd= open(token, O_RDONLY);
 					int fd1= open(token, O_RDONLY);
 					if(fd==-1)
@@ -198,12 +197,12 @@ int main()
 					else
 					{
 						char c = 'M';
-						k = read(fd1, temp1,100);
+						k = read(fd1, temp1,BLOCKSIZE);
 						while(1)
 						{
 							bzero(temp, sizeof(temp));
-							short int t = read(fd, temp, 100);
-							k = read(fd1, temp1,100);
+							t = read(fd, temp, BLOCKSIZE);
+							k = read(fd1, temp1,BLOCKSIZE);
 							if(k==0)
 							{
 								c= 'L';
@@ -220,7 +219,10 @@ int main()
 								send(newsockfd, temp, t, 0);
 							}
 							else
+							{
 								perror("file read error\n");
+								exit(0);
+							}
 
 						}
 					}
@@ -232,18 +234,29 @@ int main()
 				close(newsockfd);
 	
 				close(listenfd);
-				printf("child exit here\n");
+				// printf("child exit here\n");
 				exit(2);
 
 			}
 			else
-			{        		
-				
-				//waitpid(childpid, &status, 0);    
+			{        						
+				// waitpid(childpid, &status, 0);
 				int n = recv(sockfd, &received_code, sizeof(received_code), 0);
-				printf("%d\n",ntohl(received_code));
-				// if(ntohl(received_code) == 550)
+				printf("%d\n",ntohl(received_code));				    
 				kill(childpid, SIGKILL);
+
+				if(ntohl(received_code) == 550)
+				{
+					printf("Error in file transfer, closing client data channel\n");					
+				}
+				if(ntohl(received_code)==250)
+				{
+					printf("Data transfer successful\n");
+				}
+				if(ntohl(received_code) == 501)
+				{
+					printf("Invalid arguments\n");
+				}
 
 			}
 
@@ -254,7 +267,7 @@ int main()
 			printf("%d\n",ntohl(received_code));
 			if(ntohl(received_code) == 421)
 			{
-				printf("quit command and closing all connections\n");
+				printf("Quit command and closing all connections\n");
 				break;
 			}
 			if(ntohl(received_code) == 503)
@@ -266,9 +279,14 @@ int main()
 			{
 				printf("Invalid command\n");
 			}
+			if(ntohl(received_code) == 501)
+			{
+				printf("Invalid arguments\n");
+			}
 			if(ntohl(received_code) == 200)
 			{
-				printf("Port set to %d\n", PORTY);
+				// printf("Port set to %d\n", PORTY);
+				printf("Command successful\n");
 			}
 
 		}
