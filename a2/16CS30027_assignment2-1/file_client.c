@@ -7,7 +7,7 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <sys/stat.h> // permissions
+#include <sys/stat.h>
 #include <fcntl.h> 
 #include <unistd.h>
 
@@ -70,10 +70,18 @@ int main()
 	send(sockfd, buf, strlen(buf) + 1, 0);
 
 
-	int fd = open("clientfile.txt", O_WRONLY| O_CREAT|O_TRUNC, S_IRWXU);
+	int fd;
+	fd  = open("clientfile.txt", O_TRUNC|O_CREAT); // |O_CREAT, 0640
+
 	if(fd==-1)
 	{
-		perror("file error");
+		perror("file create error");
+	}
+	close(fd);
+	fd = open("clientfile.txt",O_WRONLY, 0666);
+	if(fd==-1)
+	{
+		perror("file use error");
 	}
 
 	int x;

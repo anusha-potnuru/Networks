@@ -28,19 +28,6 @@ int main()
 		exit(0);
 	}
 
-	/* Recall that we specified INADDR_ANY when we specified the server
-	   address in the server. Since the client can run on a different
-	   machine, we must specify the IP address of the server. 
-
-	   In this program, we assume that the server is running on the
-	   same machine as the client. 127.0.0.1 is a special address
-	   for "localhost" (this machine)
-	   
-	IF YOUR SERVER RUNS ON SOME OTHER MACHINE, YOU MUST CHANGE 
-           THE IP ADDRESS SPECIFIED BELOW TO THE IP ADDRESS OF THE 
-           MACHINE WHERE YOU ARE RUNNING THE SERVER. 
-    	*/
-
 	serv_addr.sin_family	= AF_INET;
 	inet_aton("127.0.0.1", &serv_addr.sin_addr);
 	serv_addr.sin_port	= htons(20000);
@@ -60,39 +47,50 @@ int main()
 	   block when the server is not receiving and vice versa. For
 	   non-blocking modes, refer to the online man pages.
 	*/
+	
 	for(i=0; i < 100; i++) buf[i] = '\0';
 	
 	strcpy(buf,"Request for words");
 	send(sockfd, buf, strlen(buf) + 1, 0);
-	int count=0;
+	int count=0, bytecount=0;
 
 	while(1)
 	{
 		for(i=0; i < 100; i++) buf[i] = '\0';
 		n = recv(sockfd, buf, 100, 0); //error due to not doing +1
+		bytecount = bytecount+n;
 		if(n==0)
 			break;
 		else if(n>0)
 		{
-			printf("n is %d\n",n);
+			printf("bytes recieved: %d\n",n);
 			for (int i = 0; i < n; ++i)
 			{
-				if(buf[i] == '\0' && (i<n-1? buf[i+1]!='\0':0 || i>0? buf[i-1]!='\0':0))
-				{
-					printf("index: %d\n",i );
+				if(buf[i] == '\0' )
+				{// && (i<n-1? buf[i+1]!='\0':0 || i>0? buf[i-1]!='\0':0)
+					// printf("index: %d\n",i );
 					count++;
 				}
 			}
 
-			printf("%s, %c\n",buf, buf[n-1]);
-			// printf("%d\n", n);
+			// printf("%s, %c\n\n",buf, buf[n-1]);
+			for (int i = 0; i < n; ++i)
+			{
+				/* code */
+				// if(buf[i]=='\0')
+				// 	printf("N");
+				// else
+					printf("%c", buf[i]);
+			}
+			printf("\n");
 		}
 		else
 		{
 			perror("line recieve error");
 		}
 	}
-	printf("wordcount: %d\n",count);
 	
+	printf("total bytes recieved: %d\n\n", bytecount);
+	printf("WORD COUNT: %d\n",count-1);
 	close(sockfd);
 }

@@ -1,0 +1,100 @@
+
+REPORT:
+
+
+DESCRIPTION OF FILES:
+
+rsocket.c : Contains the implementation of the rsocket functions - sendto, recvfrom, socket, bind, close
+	    with the help of auxiliary functions and data structures.
+
+rsocket.h : Header file for the rsocket.c help functions - sendto, recvfrom, socket, bind, close
+	    And defined macros for timeout, drop probability.
+	
+user1.c   : A user program using rsocket to take an input string and pass it to another port character by character.
+
+user2.c   : A user program using rsocket to receive the characters from user1 program.
+
+Makefile: : Commands which create a static library, librsocket.a, and using which user1.c and user2.c are compiled and run.
+
+
+TABULATION OF NUMBER OF TRANSMISSIONS:
+TEST STRING: Hello everyone,  this is a string of length fifty.
+Message length - 50
+
+Drop_prob  Transmissions(2 trails)   Average 	Transmissions per character
+0.05 		55 56 			55.5		1.11
+0.1  		60 59 			59.5		1.19
+0.15 		68 73			70.5		1.41
+0.2  		75 70			72.5		1.45
+0.25  		96 84 			90		1.80
+0.3  		93 93 			93.5		1.87
+0.35 		98 139 			118.5		2.37
+0.4 		153 125 		139		2.78
+0.45  		164 183			173.5  		3.47
+0.5  		198 198			198		3.96
+
+
+
+MESSAGE FORMAT:
+
+Message indicator(one character), message id(int, 4 bytes), message(maximum 100)
+
+Message indicator : 'N' for messages, 'A' for acknowledgements.
+Message id        : id of the message converted into network byte order in sendto, and back to host order after recvfrom
+Message           : Actual message being sent/received
+
+DATA STRUCTURES USED:
+
+1. RECEIVE BUFFER
+
+typedef struct receive_buffer
+{
+	char buffer[100];
+	int mesg_len;
+	struct in_addr ip;
+	in_port_t port;
+	struct receive_buffer *next;
+}receive_buffer;
+typedef struct receive_buffer_queue
+{
+	struct receive_buffer *front, *rear;
+}receive_buffer_queue;
+
+-- buffer - message received
+-- mesg_len : length of message received
+-- ip - ip address of sender
+-- port - port of sender
+-- *next - to implement queue
+
+-- Used a queue for message buffer, as the recvfrom function should take first string, and coming messages should be appended at the end.
+
+
+2.UNACKNOWLEDGED MESSAGE TABLE
+typedef struct unack_message
+{
+	int id;
+	char buffer[100];
+	int mesg_len;
+	struct in_addr ip;
+	in_port_t port;
+	struct timeval timestamp;
+}unack_message;
+
+-- id - assigned id of the message
+-- buffer - message received
+-- mesg_len : length of message received
+-- ip - ip address of sender
+-- port - port of sender
+-- *next - to implement queue
+-- timestamp -- timestamp of the send but not unacknowledged message since previous timeout.
+
+
+3. RECEIVED MESSAGE ID TABLE
+typedef struct received_message_id_table
+{
+	int id;
+}received_message_id_table;
+
+-- id - id of all the received messages
+
+

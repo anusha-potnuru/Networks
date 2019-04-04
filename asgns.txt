@@ -1,0 +1,6 @@
+What is meant by “network byte order”? I don’t think it’s very well defined.
+ I think it refers to the fact that a variety of network things use MSB order, 
+ including Ethernet frames and IPv4 packets. Presumably, we have to convert our numbers to MSB order 
+ because the kernel wants to copy them byte-for-byte into the IP packet.
+
+ 

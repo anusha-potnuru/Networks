@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 
 #include <netdb.h>
+
 extern int h_errno;
 
 #define PORT 20000 
@@ -77,6 +78,11 @@ int main()
   
         // select the ready descriptor 
         nready = select(maxfdp1, &rset, 0, 0, 0); 
+
+        if(nready ==-1)
+        {
+            perror("error");
+        } 
   
         // if tcp socket is readable then handle 
         // it by accepting the connection 
@@ -84,6 +90,7 @@ int main()
         { 
             len = sizeof(cliaddr); 
             connfd = accept(listenfd, (struct sockaddr*)&cliaddr, &len); 
+            // Having sucessfully accepting a connection, server forks
             if ((childpid = fork()) == 0) 
             { 
                 int i;
@@ -200,7 +207,7 @@ int main()
                     printf("IP:\n");
                     for (int i = 0; x->h_addr_list[i]!=NULL ; ++i)
                     {
-                        printf("%s\n",  inet_ntoa(*((struct in_addr*)x->h_addr_list[i])));
+                        printf("%s\n",  inet_ntoa(*((struct in_addr*)x->h_addr_list[i])) );
                         strcpy(ip, inet_ntoa(*((struct in_addr*)x->h_addr_list[i])));
                         int j = sendto(udpfd, (const char*)ip, strlen(ip)+1, 0, 
                                     (struct sockaddr*)&cliaddr, sizeof(cliaddr));

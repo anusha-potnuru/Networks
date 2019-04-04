@@ -37,8 +37,7 @@ int main()
     const int on = 1; 
     struct sockaddr_in cliaddr, servaddr; 
     char* message = "Hello Client"; 
-    void sig_chld(int);
-    int k=10; 
+    void sig_chld(int); 
   
     /* create listening TCP socket */
     listenfd = socket(AF_INET, SOCK_STREAM, 0); 
@@ -89,7 +88,7 @@ int main()
                 int i;
                 close(listenfd); 
                 for (i = 0; i < MAXLINE; ++i) buffer[i] = '\0';
-                recv(connfd, buffer, sizeof(buffer)+1, 0); 
+                recv(connfd, buffer, sizeof(buffer)+1,0); 
                 if(strcmp(buffer, "Request for words")==0)
                 {
                     int fd = open("word.txt", O_RDONLY);
@@ -98,7 +97,7 @@ int main()
                         perror("file open error");
                         exit(1);
                     }
-                    int done=0,prev,index,x, flag=0, count=0;
+                    int done=0,prev,index,x;
                     char buf[100], temp[200];
                     prev = -1;
                     index=0;
@@ -106,60 +105,47 @@ int main()
                     {
                         for(i=0; i < 100; i++) buf[i] = '\0';
                         x = read(fd, buf, 100);
-                        // printf("x: %d\n",x );
+                        printf("x: %d\n",x );
                         // prev = -1;
                         // index =0;
                         if(x==0)
                         {
-                            if(flag==1)
-                            {
-                                temp[index] = '\0';
-                                printf("Sending: %s\n",temp );
-                                int j = send(connfd, temp, index+1, 0);
-                                temp[0]=0;
-                                count = count+j;
-                                // printf("j is %d\n",j);
-                            }
                             break;
                         }
                         else if(x>0)
                         {
-                            prev=-1;
-                            printf("BUFFER IS: (%d size)\n%s\n\n", x, buf);
+                            printf("BUFFER IS: (%d size)\n%s\n", x, buf);
                             for (int i = 0; i < 100; ++i)
                             {
-                                if(buf[i] == '\n')
-                                {//  && (i>0? buf[i-1]!='\n':1)
+                                if(buf[i] == '\n' || (i<99 && buf[i]=='\0' && buf[i+1]=='\0'))
+                                {
                                     strncpy(temp+index, buf+prev+1, i-prev-1);
                                     temp[index+i-prev-1] = '\0';
-                                    if(index+i-prev>1)
-                                    { // this prevents sending only newlines
-                                        printf("Sending: " );
-                                        printf("%s\n", temp);
-                                        int j = send(connfd, temp, index+i-prev, 0);
-                                        index=0;
-                                        count = count+j;
-                                        // printf("j is %d\n",j);
+                                    printf("TEMP: %s\n",temp );
+                                    int j = send(connfd, temp, i-prev, 0);
+                                    printf("j is %d\n",j);
 
-                                        temp[0] = 0; //empty
-                                        if(j==-1)
-                                            perror("error sending");
+                                    temp[0] = 0; //empty
+                                    if(j==-1)
+                                        perror("error sending");
+                                    prev = i;
+                                    if(i<99 && buf[i]=='\0' && buf[i+1]=='\0')
+                                    {
+                                        if(buf[i]!= '\n')
+                                        {
+                                            int j = send(connfd, "\0", 1, 0);
+                                            printf("j is %d\n",j);   
+                                        }
+                                        break;
                                     }
-                                    index=0;
-                                    prev = i; 
-                                                                 
                                 }
                             }
-                            if(prev < x-1)
-                            { //prev+1, 99
-                                flag=1;
-                                strncpy(temp, buf+prev+1, x-prev-1);
-                                index = x-prev-1;
+
+                            if(prev< x && done!=1)
+                            {//prev+1, 99
+                                strncpy(temp, buf+prev+1, 99-prev);
+                                index = 99-prev;
                             }
-                            else
-                            {
-                                flag=0;
-                            } 
                         }
                         else
                         {
@@ -168,9 +154,13 @@ int main()
                         }
 
                     }
-                    int j = send(connfd, "\0", 1, 0);
-                    printf("sending empty string at end \n\n");
-                    printf("total bytes sent: %d\n",count+1 );
+                    // int j = send(connfd, "\0", 1, 0);
+                    // printf("j is %d\n",j);
+
+                    // printf("Message From TCP client: "); 
+                    // recv(connfd, buffer, sizeof(buffer)+1,0); 
+                    // printf("%s\n",buffer );
+                    // send(connfd, (const char*)message, strlen(message)+1,0); 
             
                 }
 
@@ -190,36 +180,26 @@ int main()
                 printf("\nMessage from UDP client: "); 
                 n = recvfrom(udpfd, buffer, sizeof(buffer), 0, 
                              (struct sockaddr*)&cliaddr, &len); 
-                printf("%s\n",buffer );
+                puts(buffer); 
                 char ip[100];
-                for (int i = 0; i < 100; ++i) ip[0] = '\0';
                 struct hostent* x;
                 x = gethostbyname(buffer);
                 if(x)
                 {
-                    printf("IP:\n");
                     for (int i = 0; x->h_addr_list[i]!=NULL ; ++i)
                     {
                         printf("%s\n",  inet_ntoa(*((struct in_addr*)x->h_addr_list[i])));
                         strcpy(ip, inet_ntoa(*((struct in_addr*)x->h_addr_list[i])));
                         int j = sendto(udpfd, (const char*)ip, strlen(ip)+1, 0, 
-                                    (struct sockaddr*)&cliaddr, sizeof(cliaddr));
-                        // printf("%d\n",j );
-                        if(j<0)
-                            perror("udp send error"); 
+                                    (struct sockaddr*)&cliaddr, sizeof(cliaddr)); 
                     }
-                    strcpy(ip, "ip sent"); // marks end for udp client
-                    int j = sendto(udpfd, (const char*)ip, strlen(ip)+1, 0, 
-                                     (struct sockaddr*)&cliaddr, sizeof(cliaddr));
-
                 }
                 else
                 {
                     printf("%d\n", h_errno);
                     herror("get host error");
                 }
-                
-            }                                 
+            }                        
         } 
 
     } 

@@ -332,7 +332,7 @@ int main()
 						if( WEXITSTATUS(status) ==2)
 						{
 							tosend = htonl(250);
-							printf("data transfer successful\n");
+							printf("data transfer successful\n");       
 						}
 						else if( WEXITSTATUS(status) ==0 )
 						{

@@ -1,18 +1,6 @@
 #include "rsocket.h"
 
-extern int errno;
-
-/*
-locks
-
-*/
-
-// printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
-// printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
-
-// sa_family_t     sin_family   AF_INET. 
-// in_port_t       sin_port     Port number. 
-// struct in_addr  sin_addr     IP address. 
+extern int errno; 
 
 typedef struct receive_buffer
 {
@@ -27,6 +15,7 @@ typedef struct unack_message
 {
 	int id;
 	char buffer[100];
+	int mesg_len;
 	struct in_addr ip;
 	in_port_t port;
 	struct timeval timestamp;
@@ -43,8 +32,8 @@ typedef struct receive_buffer_queue
 }receive_buffer_queue;
 
 int id=0;
-int unack_msg_count, no_of_transmissions, dropcount;
-pthread_mutex_t unack_lock, recv_lock; 
+int unack_msg_count, no_of_transmissions;
+pthread_mutex_t lock; 
 pthread_t X;
 
 receive_buffer_queue *recvbuf_queue;
@@ -53,14 +42,14 @@ received_message_id_table *recv_msg_id_table;
 
 int recv_msg_id_table_id;
 
-// receive buffer - buffer, source_ip - NOT ID
+// receive buffer - buffer, source_ip - NO ID
 // unack messg - id, buffer, inet_aton(dest_addr.sin_port), time
 // received message id table - id
 
 
 void insert(receive_buffer_queue* root,  receive_buffer* node)
 {
-	printf("inserting in receive_buffer_queue\n");
+	// printf("inserting in receive_buffer_queue\n");
 	receive_buffer *temp = node; 
 
 	if(root->rear==NULL)
@@ -90,9 +79,8 @@ receive_buffer* delete(receive_buffer_queue* root)
 int dropMessage(float p)
 {
 	float r;
-	r = (float)rand()/(float)RAND_MAX;
+	r = (float)rand()/((float)RAND_MAX+1);
 	int ret = r<p ? 1: 0;
-	// printf("drop prb %d\n",ret );
 	return ret;
 }
 
@@ -100,28 +88,43 @@ void HandleRetransmit(int socket)
 {
 	// scan unack for which mesg
 	struct sockaddr_in dest_addr;
-	int i, dest_len;
+	int i, dest_len, k;
 	dest_addr.sin_family = AF_INET;
 
 	struct timeval res, curr_time;
 	gettimeofday(&curr_time, NULL);
 
-	// see dest addr
-	for(i=0; i < 100 && unack_msg[i].id>=0  ;i++)
+	for(i=0; i < 100 ;i++)
 	{
-		timersub(&unack_msg[i].timestamp, &curr_time, &res);
-		if( res.tv_sec  >= T )
+		pthread_mutex_lock(&lock);
+		if( unack_msg[i].id>=0 && curr_time.tv_sec - unack_msg[i].timestamp.tv_sec >= T )
 		{
 			// retransmit
-			printf("retransmit\n");
+			printf("retransmit %d \n", i);
 			dest_addr.sin_addr =  unack_msg[i].ip;
 			dest_addr.sin_port = unack_msg[i].port;
 			dest_len = sizeof(dest_addr);
 
-			sendto(socket, unack_msg[i].buffer, strlen(unack_msg[i].buffer), 0, 
-				(const struct sockaddr*)&dest_addr, dest_len); //flags
+			char send_buf[1+sizeof(id)+unack_msg[i].mesg_len];
+			
+			strcpy(send_buf, "N");
+
+			int conv_id = htonl(unack_msg[i].id);
+			memcpy(&send_buf[1], &conv_id, sizeof(id));
+			memcpy(&send_buf[1+sizeof(id)], unack_msg[i].buffer, unack_msg[i].mesg_len);
+
+			k = sendto(socket, send_buf, 1+sizeof(id)+unack_msg[i].mesg_len, 0, 
+				(const struct sockaddr*)&dest_addr, dest_len); 
+
+			if(k<0)
+			{
+				perror("unable to send, in sendto");
+				exit(EXIT_FAILURE);
+			}
+			no_of_transmissions++;
 			gettimeofday(&unack_msg[i].timestamp, NULL);
 		}
+		pthread_mutex_unlock(&lock);
 	}
 }
 
@@ -132,14 +135,15 @@ void HandleAppMsgRecv(int socket, int id, char* buffer, int buf_length, struct s
 	int dest_len = sizeof(dest_addr);
 	char integer_string[32];
 
-	for(i=0 ; i < recv_msg_id_table_id; i++)
+	for(i=0 ; i < recv_msg_id_table_id+1 ; i++)
 	{
 		if(recv_msg_id_table[i].id == id)
 		{// duplicate mesg
 			// send ack
 			
 			strcpy(ack_buf, "A");
-			memcpy(&ack_buf[1], &id, sizeof(id));
+			int conv_id = htonl(id);
+			memcpy(&ack_buf[1], &conv_id, sizeof(conv_id));
 
 			sendto(socket, ack_buf, 1+sizeof(id) , 0, 
 				(const struct sockaddr*)&dest_addr, dest_len); //flags
@@ -152,8 +156,8 @@ void HandleAppMsgRecv(int socket, int id, char* buffer, int buf_length, struct s
 	{
 		// send ack		
 		strcpy(ack_buf, "A");
-
-		memcpy(&ack_buf[1], &id, sizeof(id));
+		int conv_id = htonl(id);
+		memcpy(&ack_buf[1], &conv_id, sizeof(conv_id));
 
 		sendto(socket, ack_buf, 1+sizeof(id) , 0, 
 			(const struct sockaddr*)&dest_addr, dest_len); //flags
@@ -162,17 +166,19 @@ void HandleAppMsgRecv(int socket, int id, char* buffer, int buf_length, struct s
 		recv_msg_id_table[recv_msg_id_table_id++].id=id;
 
 		// add to receive buffer
-		pthread_mutex_lock(&recv_lock);
-
+		
 		struct receive_buffer* node = (struct receive_buffer*)malloc(sizeof(receive_buffer));
 		node->ip = dest_addr.sin_addr;
 		node->port = dest_addr.sin_port;
 		memcpy(node->buffer, buffer, buf_length);
 		node->mesg_len = buf_length;
 		node->next = NULL;
+
+		pthread_mutex_lock(&lock);
+
 		insert(recvbuf_queue, node);
 
-		pthread_mutex_unlock(&recv_lock);
+		pthread_mutex_unlock(&lock);
 	}
 }
 
@@ -181,11 +187,10 @@ void HandleACKMsgRecv(int socket, int id)
 	int i;
 	for(i=0; i< 100 ; i++)
 	{
-		
+		pthread_mutex_lock(&lock); 		
 		if(id == unack_msg[i].id)
 		{
-			pthread_mutex_lock(&unack_lock); 
-			printf("handle ack\n");
+			printf("received ack for %d \n", id);
 			// remove from unack_msg
 			unack_msg_count--;
 			unack_msg[i].id = -1;
@@ -193,9 +198,9 @@ void HandleACKMsgRecv(int socket, int id)
 			bzero(&unack_msg[i].ip , sizeof(unack_msg[i].ip));
 			unack_msg[i].port =0;
 			unack_msg[i].timestamp = (struct timeval){0};
-			pthread_mutex_unlock(&unack_lock);
+			
 		}
-		
+		pthread_mutex_unlock(&lock);	
 	}
 	return;
 }
@@ -209,21 +214,33 @@ void HandleReceive(int socket)
 	int len = recvfrom(socket, buffer, 133, 0,
 				(struct sockaddr *)&cliaddr, &socklen); //flags
 
-	int id;
-	// to do - get id
-
-	memcpy(&id, &buffer[1], sizeof(id));
-
-	printf("id in receive: %d\n",id );
-
-	if(buffer[0] == 'N')
-	{// appl mesg  - to do id 
-		HandleAppMsgRecv(socket, id, &buffer[sizeof(id)+1], len-sizeof(id)-1,  cliaddr);
+	int t = dropMessage(DROP_PROB);
+	// printf("T: %d\n",t);
+	if(!t)
+	{
+		int id;
+		memcpy(&id, &buffer[1], sizeof(id));
+		id = ntohl(id);
+		// printf("id in receive: %d\n",id );
+		if(buffer[0] == 'N')
+		{// appl mesg  - to do id 
+			HandleAppMsgRecv(socket, id, &buffer[sizeof(id)+1], len-sizeof(id)-1,  cliaddr);
+		}
+		else if(buffer[0] == 'A')
+		{// ack mess
+			HandleACKMsgRecv(socket, id);
+		}
+		else
+		{
+			printf("error b0: %c\n", buffer[0]);
+		}
 	}
-	if(buffer[0] == 'A')
-	{// ack mess
-		HandleACKMsgRecv(socket, id);
+	else
+	{
+		printf("dropping message\n");
 	}
+
+
 }
 
 void *runner(void* arg)
@@ -251,18 +268,11 @@ void *runner(void* arg)
 		{
 			HandleRetransmit(socket);
 			t.tv_sec = T;
+			t.tv_usec=0;
 		}
 		if(FD_ISSET(socket, &fds))		
 		{
-			if(!dropMessage(DROP_PROB))
-			{
-				HandleReceive(socket);
-			}
-			else
-			{
-				dropcount++;
-				printf("dropping message\n");
-			}
+			HandleReceive(socket);
 		}		
 	}
 
@@ -300,14 +310,8 @@ int r_socket(int domain, int type, int protocol)
 	unack_msg_count=0;
 	recv_msg_id_table_id=0;
 	no_of_transmissions=0;
-	dropcount=0;
 
-	if(pthread_mutex_init(&unack_lock, NULL) != 0) 
-	{ 
-		printf("\n mutex init has failed\n"); 
-		return -1; 
-	}
-	if(pthread_mutex_init(&recv_lock, NULL) != 0) 
+	if(pthread_mutex_init(&lock, NULL) != 0) 
 	{ 
 		printf("\n mutex init has failed\n"); 
 		return -1; 
@@ -339,8 +343,9 @@ const struct sockaddr *dest_addr, socklen_t dest_len)
 	char buf_wlen[length+1];
 
 	strcpy(newbuf, "N");
-	
-	memcpy(&newbuf[1], &id, sizeof(id));
+
+	int conv_id = htonl(id);
+	memcpy(&newbuf[1], &conv_id, sizeof(conv_id));
 
 	// take only till length
 	memcpy(&newbuf[1+sizeof(id)], buffer, length );
@@ -348,27 +353,31 @@ const struct sockaddr *dest_addr, socklen_t dest_len)
 	int k = sendto(socket, newbuf, 1+sizeof(id)+length, flags, 
 			dest_addr, dest_len);
 
+	if(k<0)
+	{
+		perror("unable to send");
+	}
+
+	no_of_transmissions++;
 	gettimeofday(&curr_time, NULL);
 
 	// add to unack messg - id, buffer, dest_addr.sin_port, time
 	for(i=0; i < 100; i++)
 	{
-		
+		pthread_mutex_lock(&lock); 		
 		if(unack_msg[i].id==-1)
-		{
-			pthread_mutex_lock(&unack_lock); 
-
+		{			
 			unack_msg_count++;
 			unack_msg[i].id = id++;
 			memcpy(unack_msg[i].buffer, buffer, length);
+			unack_msg[i].mesg_len = length;
 			unack_msg[i].ip = ((struct sockaddr_in*)dest_addr)->sin_addr;
 			unack_msg[i].port = ((struct sockaddr_in*)dest_addr)->sin_port;
 			unack_msg[i].timestamp = curr_time;
-			pthread_mutex_unlock(&unack_lock); 
-
+			pthread_mutex_unlock(&lock); 
 			break;
 		}
-		
+		pthread_mutex_unlock(&lock); 
 	}
 	return k;
 }
@@ -380,18 +389,20 @@ sockaddr *restrict address, socklen_t *restrict address_len)
 	while(1)
 	{
 		// check the recv buffer , !empty
-		// use lock, as when this deletes, other may insert		
+		// use lock, as when this deletes, other may insert
+		pthread_mutex_lock(&lock);		
 		if(recvbuf_queue->front!=NULL)
 		{ // read first string
-			pthread_mutex_lock(&recv_lock);
+			
 			receive_buffer* node = delete(recvbuf_queue);
 			memcpy(buffer, node->buffer, node->mesg_len);
 			ret = node->mesg_len;
-			pthread_mutex_unlock(&recv_lock);
+			pthread_mutex_unlock(&lock);
 			return ret;
 		}
 		else
 		{
+			pthread_mutex_unlock(&lock);
 			sleep(1);
 		}
 	}
@@ -400,14 +411,18 @@ sockaddr *restrict address, socklen_t *restrict address_len)
 int r_close(int fildes)
 {
 	// free tables
-	while(unack_msg_count>0);
+	while(unack_msg_count>0)
+	{
+		sleep(1);
+	}
 
-	printf("DROPCOUNT: %d\n", dropcount );
+	printf("NUMBER OF TRANSMISSSIONS: %d\n", no_of_transmissions);
+
 	free(recvbuf_queue);
 	free(unack_msg);
 	free(recv_msg_id_table);
-	pthread_mutex_destroy(&unack_lock); 
-	pthread_mutex_destroy(&recv_lock); 
+
+	pthread_mutex_destroy(&lock); 
 	// have to close thread
 	pthread_cancel(X);
 	int ret=close(fildes);

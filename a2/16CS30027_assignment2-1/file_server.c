@@ -69,7 +69,7 @@ int main()
 		exit(0);
 	}
 
-	listen(sockfd, 5); /* This specifies that up to 5 concurrent client
+	listen(sockfd, 1); /* This specifies that up to 5 concurrent client
 			      requests will be queued up while the system is
 			      executing the "accept" system call below.
 			   */
@@ -81,7 +81,7 @@ int main()
 	   communication is over, the process comes back to wait again on
 	   the original socket descriptor.
 	*/
-	while (1) {
+	// while (1) {
 
 		/* The accept() system call accepts a client connection.
 		   It blocks the server until a client request comes.
@@ -122,7 +122,6 @@ int main()
 		for(i=0; i < 100; i++) buf[i] = '\0';
 			
 		recv(newsockfd, buf, 100, 0);
-	
 		printf("received file name: %s\n", buf);
 		strcpy(filename, buf);
 		// printf("%s\n", filename );
@@ -163,9 +162,8 @@ int main()
 		close(fp);
 
 		close(newsockfd);
-		
-	}
-	close(sockfd);
+		close(sockfd);
+	// }
 }
 			
 

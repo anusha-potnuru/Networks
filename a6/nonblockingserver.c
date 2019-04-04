@@ -1,4 +1,12 @@
 // Server program 
+
+/*
+msg_dontwait - set one recv call nonblocking
+every call on socket nonblocking - fcntl 
+tcp nonblck
+eagain, ewouldblock - then udp
+
+*/
 #include <arpa/inet.h> 
 #include <errno.h> 
 #include <netinet/in.h> 
@@ -12,6 +20,7 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+extern int errno;
 
 #include <netdb.h>
 extern int h_errno;
@@ -61,29 +70,32 @@ int main()
     // }
 
     // binding server addr structure to udp sockfd 
-    bind(udpfd, (struct sockaddr*)&servaddr, sizeof(servaddr)); 
+    bind(udpfd, (struct sockaddr*)&servaddr, sizeof(servaddr));
   
     // clear the descriptor set 
-    FD_ZERO(&rset); 
+
+    fcntl(listenfd, F_SETFL, O_NONBLOCK);
   
-    // get maxfd 
-    maxfdp1 = max(listenfd, udpfd) + 1; 
-    for (;;) 
-    { 
-        FD_ZERO(&rset); 
-        // set listenfd and udpfd in readset 
-        FD_SET(listenfd, &rset); 
-        FD_SET(udpfd, &rset); 
-  
-        // select the ready descriptor 
-        nready = select(maxfdp1, &rset, 0, 0, 0); 
-  
-        // if tcp socket is readable then handle 
-        // it by accepting the connection 
-        if (FD_ISSET(listenfd, &rset)) 
+    while(1)
+    {
+        sleep(2); 
+
+        // while there are tcp connections
+        // handle it by accepting the connection in new child
+        while(1)
         { 
-            len = sizeof(cliaddr); 
-            connfd = accept(listenfd, (struct sockaddr*)&cliaddr, &len); 
+            len = sizeof(cliaddr);
+            connfd = accept(listenfd, (struct sockaddr*)&cliaddr, &len);
+            if(connfd==-1)
+            {
+                if(errno == EWOULDBLOCK || errno == EAGAIN)
+                { // no connections to be accepted
+                    printf("no pending tcp connections\n");
+                    break;
+                }
+                else
+                    perror("error in tcp");
+            }
             if ((childpid = fork()) == 0) 
             { 
                 int i;
@@ -175,21 +187,32 @@ int main()
                 }
 
                 close(connfd); 
-                exit(0); 
+                exit(0);
             }
             close(connfd); 
             
-        } 
-        // if udp socket is readable receive the message. 
-        if (FD_ISSET(udpfd, &rset)) 
+        }
+
+        // while there are udp connections
+        while(1)
         {
+            len = sizeof(cliaddr); 
+            bzero(buffer, sizeof(buffer));
+            n = recvfrom(udpfd, buffer, sizeof(buffer), MSG_DONTWAIT, 
+                             (struct sockaddr*)&cliaddr, &len);
+            if(n==-1)
+            {
+                if(errno == EWOULDBLOCK || errno == EAGAIN)
+                {
+                    printf("no data in udp\n\n");
+                    break;
+                }
+                else
+                    perror("error in udp");
+            }
             if(fork()==0)
-            { 
-                len = sizeof(cliaddr); 
-                bzero(buffer, sizeof(buffer)); 
-                printf("\nMessage from UDP client: "); 
-                n = recvfrom(udpfd, buffer, sizeof(buffer), 0, 
-                             (struct sockaddr*)&cliaddr, &len); 
+            {                
+                printf("\nMessage from UDP client: ");                 
                 printf("%s\n",buffer );
                 char ip[100];
                 for (int i = 0; i < 100; ++i) ip[0] = '\0';
@@ -218,9 +241,9 @@ int main()
                     printf("%d\n", h_errno);
                     herror("get host error");
                 }
-                
+                exit(0);
             }                                 
         } 
-
+        // printf("out of udp\n\n");
     } 
 } 

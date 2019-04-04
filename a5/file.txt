@@ -1,0 +1,8 @@
+networks
+asdsad
+asdasdas
+ If the file is present, the server first sends a message “​L​” followed by an integer ​FSIZE indicating the size of the file. The client receives this message and waits for the file data to be received in blocks.
+6. The server divides the file in a predefined block size ​B which is an integer. ​B is known to both the server and the client a priori. Assume, ​B = 20 bytes. Note that if the file size is FSIZE​, then there will be (F​ SIZE/B​) (integer division) number of blocks of size ​B and the last block will be of size (​FSIZE % B​) (remainder operation) bytes. Every ​send() call for file transfer sends data not more than that of a single block to the client.
+7. With every ​recv() call, the client receives the message block exactly of size ​B bytes except for the last block. With reception of every blocks, it maintains a running count of the number of blocks received, and accordingly calculates the size of the last block. For the last block, it waits for exactly ​(FSIZE % B)​ bytes.
+8. As the client receives data in blocks, it copies the same into a new file in the local directory. Once the client has received all the blocks, it closes the connection and exits.
+9. Note that no special end of file marker is sent to the client. Client understands the end of file transfer from the number of bytes received.dasd

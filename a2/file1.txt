@@ -1,0 +1,6 @@
+The client also maintains a
+running count of the number of bytes and the number of words in the file. For the
+purpose of this assignment, you can take ',' comma, ';' semicolon, ':' colon, '.'
+fullstop, or one or more whitespace space/tab, or any combinations of them, as
+delimiters between two words. For example, "this is", "this is", "this,is", "this, is",
+"this,, ; is" are all to be taken as 2 words.
