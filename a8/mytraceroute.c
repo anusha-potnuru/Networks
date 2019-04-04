@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <linux/udp.h> /* for udp header */ 
@@ -12,11 +13,19 @@
 #include <signal.h> 
 #include <sys/wait.h>
 #include <netdb.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <netdb.h>
+#include <errno.h>
 
 extern int errno;
 
-#DEFINE T_SEC 1
-#DEFINE T_USEC 0
+#define T_SEC 3
+#define T_USEC 0
+#define PORT1 50000 //udp port
+#define PORT2 50001 //icmp port
 /*
 struct iphdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
@@ -56,6 +65,43 @@ struct sockaddr_in {
            };
 
 */
+
+// uint16_t udp_checksum(const void* buf, size_t len, in_addr_t src_addr, in_addr_t dest_addr)
+// {
+// 	const uint16_t* buf= buff;
+// 	int sum=0;
+// 	while(len>1)
+// 	{
+// 		sum+=*buf++;
+// 		if(sum & 0x80000000)
+// 		{
+// 			sum = (sum&0xFFFF) + sum>>16;
+// 		}
+// 		len-=2;
+// 	}
+// 	// if(len&1)
+// 	// {
+
+// 	// }
+// 	return 0;
+// }
+
+unsigned short checksum(void *b, int len) 
+{    
+	unsigned short *buf = b; 
+    unsigned int sum=0; 
+    unsigned short result; 
+  
+    for ( sum = 0; len > 1; len -= 2 ) 
+        sum += *buf++; 
+    if ( len == 1 ) 
+        sum += *(unsigned char*)buf; 
+    sum = (sum >> 16) + (sum & 0xFFFF); 
+    sum += (sum >> 16); 
+    result = ~sum; 
+    return result; 
+} 
+
 int main()
 {
 	struct in_addr dest_ip_addr;
@@ -73,24 +119,24 @@ int main()
 		{
 			printf("%s\n",  inet_ntoa(*((struct in_addr*)x->h_addr_list[i])) );
 			strcpy(ip, inet_ntoa(*((struct in_addr*)x->h_addr_list[i])));
-			memcpy(&dest_ip_addr, x->h_addr_list[i], sizeof(struct in_addr));
+			memcpy(&dest_ip_addr,((struct in_addr*)x->h_addr_list[i]), sizeof(struct in_addr));
 
 		}
 	}
 
 	struct sockaddr_in saddr_udp, saddr_icmp;
 	int saddr_len_udp, saddr_len_icmp;
-	int udphdrlen = sizeof(hdrudp);
+	
 
 	int udpfd, icmpfd;
-	udpfd = socket(AF_INET, SOCK_RAW, IPROTO_UDP);
+	udpfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
 	if(udpfd < 0)
 	{
 		perror("socket creation failed");
 		exit(0);
 	}
 	int enable=1;
-	setsockopt(udpfd, IPROTO_IP, IPHDR_INCL, &enable, sizeof(int));
+	setsockopt(udpfd, IPPROTO_IP, IP_HDRINCL, &enable, sizeof(int));
 
 	saddr_udp.sin_family = AF_INET;
 	saddr_udp.sin_port = htons(PORT1);
@@ -103,7 +149,7 @@ int main()
 		exit(EXIT_FAILURE);
 	}
 
-	icmpfd = socket(AF_INET, SOCK_RAW, IPROTO_ICMP);
+	icmpfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if(icmpfd < 0)
 	{
 		perror("icmp raw socket creation failed");
@@ -120,8 +166,9 @@ int main()
 		exit(EXIT_FAILURE);
 	}
 
+	printf("Sockets created and binded\n");
 	struct iphdr *hdrip, *icmp_hdrip;
-	struct updhdr *hdrudp;
+	struct udphdr *hdrudp;
 	struct icmphdr *hdricmp;
 
 	struct sockaddr_in destaddr, checkaddr;
@@ -129,43 +176,57 @@ int main()
 	destaddr.sin_port = 32164; //given
 	destaddr.sin_addr =  dest_ip_addr; /* address in network byte order */
 
-	int ttl=1,r, ret, len;
-	char buffer[sizeof(struct iphdr)+sizeof(struct updhdr)+52];
-	char mesg[52];
+	printf("%s\n", inet_ntoa(destaddr.sin_addr) );
+
+	int ttl=1,r, ret, len, usend, k;
+	char buffer[sizeof(struct iphdr)+sizeof(struct udphdr)+52];
+	// char mesg[52];
+	for (k = sizeof(struct iphdr)+sizeof(struct udphdr); k < sizeof(struct iphdr)+sizeof(struct udphdr)+52 ; ++k)
+	{
+		/* code */
+		buffer[k] = 'n';
+	}
 	fd_set rset;
-	clock_t t;
+	clock_t time;
 	double time_taken;
 
 	hdrip = (struct iphdr*)buffer;
-	hdrudp = (struct updhdr*)(buffer+sizeof(struct iphdr));
+	hdrudp = (struct udphdr*)(buffer+sizeof(struct iphdr));
 	// IP
-	hdrip.ihl = INET_HDR_LEN;
-	hdrip.version = 4;
-	hdrip.protocol = IPROTO_UDP;
-	hdrip.tot_len = sizeof(struct iphdr)+sizeof(struct udphdr);
-	hdrip.saddr =  INADDR_ANY;
-	hdrip.daddr = dest_ip_addr.s_addr;
-	hdrip.ttl = ttl;
+	hdrip->ihl = 5;
+	hdrip->version = 4;
+	hdrip->protocol = IPPROTO_IP;
+	// hdrip->tot_len = sizeof(struct iphdr)+sizeof(struct udphdr);
+	//ip header sets tot_len and check
+	hdrip->saddr =  INADDR_ANY;
+	hdrip->daddr = dest_ip_addr.s_addr;
+	hdrip->ttl = ttl;
+
 	//UDP
-	hdrudp.source = ;
-	hdrudp.dest = ;
+	hdrudp->source = htons(PORT1);
+	hdrudp->dest = htons(32164);
+	hdrudp->len = sizeof(struct udphdr)+52; //doubt
+	// hdrudp->check = 0; // doesn't check if 0
+	hdrudp->check = checksum(&hdrudp, sizeof(struct udphdr));
 
 	struct timeval t;
 	t.tv_sec=T_SEC;
 	t.tv_usec= T_USEC;
+	char icmp_buffer[1024];
 
 	int count=0;
-	while(1)
+	while(ttl<30)
 	{
 		FD_ZERO(&rset);
-		FD_SET(&icmpfd);
-		sendto(udpfd, buffer, sizeof(buffer),  (const struct sockaddr *)&destaddr , sizeof(destaddr) );
+		FD_SET(icmpfd, &rset);
+		usend = sendto(udpfd, buffer, sizeof(buffer),  0, (const struct sockaddr *)&destaddr , sizeof(destaddr) );
+		printf("udp sendto ret value: %d\n",usend );
 		// start time
-		t = clock();
+		time = clock();
 		r = select(icmpfd+1, &rset , 0,0, &t);
 		// end time
-		t = clock()-t;
-		time_taken = (double)t / CLOCKS_PER_SEC;
+		time = clock()-time;
+		time_taken = ((double)time) / CLOCKS_PER_SEC;
 
 		if(r<0 && (errno!=EINTR))
 		{
@@ -174,9 +235,12 @@ int main()
 
 		if(r==0)
 		{
+			printf("timeout\n");
+			printf("Hop_Count(TTL Value) %d, * *\n", hdrip->ttl);
 			if(count==3)
 			{
-				printf("Hop_Count(TTL Value) %d, * *\n", ttl);
+				ttl++;
+				count=0;
 			}
 			count++;
 			t.tv_sec = T_SEC;
@@ -185,32 +249,41 @@ int main()
 		if(FD_ISSET(icmpfd, &rset))
 		{
 			len = sizeof(checkaddr);
-			ret = recvfrom(icmpfd, icmp_buffer, sizeof(icmp_buffer), 0, (struct sockaddr*)&checkaddr, &len);
+			ret = recvfrom(icmpfd, icmp_buffer, 1024, 0, (struct sockaddr*)&checkaddr, &len);
 			icmp_hdrip = (struct iphdr*)icmp_buffer;
 
 			hdricmp = (struct icmphdr*)(icmp_buffer + sizeof(struct iphdr));
 
-			if(hdricmp.type == 3)
+			if(hdricmp->type == 3)
 			{ // DEST_UNREACHABLE
-				if(checkaddr == destaddr)
-				{
-					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
+				printf("dest reached, %s\n", inet_ntoa(checkaddr.sin_addr));
+				printf("%d %d %d %d \n", checkaddr.sin_family , destaddr.sin_family , checkaddr.sin_port, destaddr.sin_port);
+				if( checkaddr.sin_addr.s_addr == destaddr.sin_addr.s_addr)
+				{// check family, port, sin_addr
+					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
 					break;
 				}
 				else
 				{
 					printf("not reached correct dest\n");
 				}
+				ttl++;
 			}
-			else if(hdricmp.type ==11)
+			else if(hdricmp->type ==11)
 			{//TIME EXCEEDED
-				printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
+				printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
+				ttl++;
 			}
+			else
+			{
+				printf("spurious packet: %d\n", hdricmp->type );
+			}
+			
 			// ignore all other types of icmp packets
 		}
 
-		ttl++;
-		hdrip.ttl = ttl;
+		
+		hdrip->ttl = ttl;
 	}
 
 	close(icmpfd);
