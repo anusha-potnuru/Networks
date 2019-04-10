@@ -28,6 +28,9 @@ extern int errno;
 #define PORT1 50000 //udp port
 #define PORT2 50001 //icmp port
 /*
+
+DATA STRUCTURES:
+
 struct iphdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8	ihl:4,
@@ -58,7 +61,6 @@ __u16 	len
 __u16 	check
 
 
-
 struct sockaddr_in {
                sa_family_t    sin_family; /* address family: AF_INET
                in_port_t      sin_port;   /* port in network byte order 
@@ -67,26 +69,7 @@ struct sockaddr_in {
 
 */
 
-// uint16_t udp_checksum(const void* buf, size_t len, in_addr_t src_addr, in_addr_t dest_addr)
-// {
-// 	const uint16_t* buf= buff;
-// 	int sum=0;
-// 	while(len>1)
-// 	{
-// 		sum+=*buf++;
-// 		if(sum & 0x80000000)
-// 		{
-// 			sum = (sum&0xFFFF) + sum>>16;
-// 		}
-// 		len-=2;
-// 	}
-// 	// if(len&1)
-// 	// {
-
-// 	// }
-// 	return 0;
-// }
-
+// CHECKSUM for ip
 unsigned short checksum(void *b, int len) 
 {    
 	unsigned short *buf = b; 
@@ -121,8 +104,8 @@ uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_
 	}
 
 	if ( len & 1 )
-	     // Add the padding if the packet length is odd          //
-	     sum += *((uint8_t *)buf);
+	// Add the padding if the packet length is odd          //
+	    sum += *((uint8_t *)buf);
 
 	// Add the pseudo-header                                        //
 	sum += *(ip_src++);
@@ -142,13 +125,20 @@ uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_
 	return ( (uint16_t)(~sum)  );
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 	struct in_addr dest_ip_addr;
 	char domain_name[200];
-	printf("Enter domain name:\n");
-	scanf("%s", domain_name);
-
+	if(argv[1])
+	{
+		strcpy(domain_name, argv[1]);
+	}
+	else
+	{
+		printf("Enter domain name:\n");
+		scanf("%s", domain_name);	
+	}
+	
 	int flag=0;
 	char ip[100];
 	for (int i = 0; i < 100; ++i) ip[0] = '\0';
@@ -219,7 +209,9 @@ int main()
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Sockets created and binded\n\n");
+	printf("Sockets created and binded\n");
+	printf("Starting traceroute...\n\n");
+
 	struct iphdr *hdrip, *icmp_hdrip;
 	struct udphdr *hdrudp;
 	struct icmphdr *hdricmp;
@@ -323,7 +315,7 @@ int main()
 				}
 				else
 				{
-					printf("not reached correct Destination\n");
+					printf("not reached correct destination\n");
 				}
 				ttl++;
 			}
