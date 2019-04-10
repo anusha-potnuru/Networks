@@ -22,8 +22,9 @@
 
 extern int errno;
 
-#define T_SEC 3
+#define T_SEC 1
 #define T_USEC 0
+#define HOP_LIMIT 64
 #define PORT1 50000 //udp port
 #define PORT2 50001 //icmp port
 /*
@@ -102,26 +103,78 @@ unsigned short checksum(void *b, int len)
     return result; 
 } 
 
+uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_t dest_addr)
+{
+	const uint16_t *buf=buff;
+	uint16_t *ip_src=(void *)&src_addr, *ip_dst=(void *)&dest_addr;
+	uint32_t sum;
+	size_t length=len;
+
+	// Calculate the sum                                            //
+	sum = 0;
+	while (len > 1)
+	{
+	     sum += *buf++;
+	     if (sum & 0x80000000)
+	             sum = (sum & 0xFFFF) + (sum >> 16);
+	     len -= 2;
+	}
+
+	if ( len & 1 )
+	     // Add the padding if the packet length is odd          //
+	     sum += *((uint8_t *)buf);
+
+	// Add the pseudo-header                                        //
+	sum += *(ip_src++);
+	sum += *ip_src;
+
+	sum += *(ip_dst++);
+	sum += *ip_dst;
+
+	sum += htons(IPPROTO_UDP);
+	sum += htons(length);
+
+	// Add the carries                                              //
+	while (sum >> 16)
+	     sum = (sum & 0xFFFF) + (sum >> 16);
+
+	// Return the one's complement of sum                           //
+	return ( (uint16_t)(~sum)  );
+}
+
 int main()
 {
 	struct in_addr dest_ip_addr;
 	char domain_name[200];
+	printf("Enter domain name:\n");
 	scanf("%s", domain_name);
 
+	int flag=0;
 	char ip[100];
 	for (int i = 0; i < 100; ++i) ip[0] = '\0';
 	struct hostent* x;
 	x = gethostbyname(domain_name);
 	if(x)
 	{
-		printf("IP:\n");
+		printf("IP for given domain:\n");
 		for (int i = 0; x->h_addr_list[i]!=NULL ; ++i)
 		{
 			printf("%s\n",  inet_ntoa(*((struct in_addr*)x->h_addr_list[i])) );
 			strcpy(ip, inet_ntoa(*((struct in_addr*)x->h_addr_list[i])));
 			memcpy(&dest_ip_addr,((struct in_addr*)x->h_addr_list[i]), sizeof(struct in_addr));
-
+			flag=1;
 		}
+	}
+	else
+	{
+		herror("gethostbyname error");
+	}
+	printf("\n");
+
+	if(flag==0)
+	{
+		printf("Invalid domain name\n");
+		exit(EXIT_FAILURE);
 	}
 
 	struct sockaddr_in saddr_udp, saddr_icmp;
@@ -166,7 +219,7 @@ int main()
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Sockets created and binded\n");
+	printf("Sockets created and binded\n\n");
 	struct iphdr *hdrip, *icmp_hdrip;
 	struct udphdr *hdrudp;
 	struct icmphdr *hdricmp;
@@ -176,7 +229,7 @@ int main()
 	destaddr.sin_port = 32164; //given
 	destaddr.sin_addr =  dest_ip_addr; /* address in network byte order */
 
-	printf("%s\n", inet_ntoa(destaddr.sin_addr) );
+	// printf("%s\n", inet_ntoa(destaddr.sin_addr) );
 
 	int ttl=1,r, ret, len, usend, k;
 	char buffer[sizeof(struct iphdr)+sizeof(struct udphdr)+52];
@@ -186,6 +239,7 @@ int main()
 		/* code */
 		buffer[k] = 'n';
 	}
+
 	fd_set rset;
 	clock_t time;
 	double time_taken;
@@ -205,9 +259,12 @@ int main()
 	//UDP
 	hdrudp->source = htons(PORT1);
 	hdrudp->dest = htons(32164);
-	hdrudp->len = sizeof(struct udphdr)+52; //doubt
+	hdrudp->len = sizeof(struct udphdr)+52; //added
 	// hdrudp->check = 0; // doesn't check if 0
-	hdrudp->check = checksum(&hdrudp, sizeof(struct udphdr));
+
+	hdrudp->check = udp_checksum(&hdrudp, sizeof(struct udphdr)+52 , INADDR_ANY, dest_ip_addr.s_addr);
+	// printf("%d\n", hdrudp->check );
+	// len doubt
 
 	struct timeval t;
 	t.tv_sec=T_SEC;
@@ -215,12 +272,12 @@ int main()
 	char icmp_buffer[1024];
 
 	int count=0;
-	while(ttl<30)
+	while(ttl < HOP_LIMIT)
 	{
 		FD_ZERO(&rset);
 		FD_SET(icmpfd, &rset);
 		usend = sendto(udpfd, buffer, sizeof(buffer),  0, (const struct sockaddr *)&destaddr , sizeof(destaddr) );
-		printf("udp sendto ret value: %d\n",usend );
+		// printf("udp sendto ret value: %d\n",usend );
 		// start time
 		time = clock();
 		r = select(icmpfd+1, &rset , 0,0, &t);
@@ -235,7 +292,7 @@ int main()
 
 		if(r==0)
 		{
-			printf("timeout\n");
+			// printf("timeout\n");
 			printf("Hop_Count(TTL Value) %d, * *\n", hdrip->ttl);
 			if(count==3)
 			{
@@ -256,16 +313,17 @@ int main()
 
 			if(hdricmp->type == 3)
 			{ // DEST_UNREACHABLE
-				printf("dest reached, %s\n", inet_ntoa(checkaddr.sin_addr));
-				printf("%d %d %d %d \n", checkaddr.sin_family , destaddr.sin_family , checkaddr.sin_port, destaddr.sin_port);
+				
+				// printf("%d %d %d %d \n", checkaddr.sin_family , destaddr.sin_family , checkaddr.sin_port, destaddr.sin_port);
 				if( checkaddr.sin_addr.s_addr == destaddr.sin_addr.s_addr)
 				{// check family, port, sin_addr
 					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
+					printf("Destination reached, %s\n", inet_ntoa(checkaddr.sin_addr));
 					break;
 				}
 				else
 				{
-					printf("not reached correct dest\n");
+					printf("not reached correct Destination\n");
 				}
 				ttl++;
 			}
@@ -276,7 +334,7 @@ int main()
 			}
 			else
 			{
-				printf("spurious packet: %d\n", hdricmp->type );
+				printf("spurious icmp packet: %d\n", hdricmp->type );
 			}
 			
 			// ignore all other types of icmp packets
