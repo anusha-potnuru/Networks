@@ -127,6 +127,7 @@ uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_
 
 int main(int argc, char *argv[])
 {
+	srand(time(NULL));
 	struct in_addr dest_ip_addr;
 	char domain_name[200];
 	if(argv[1])
@@ -210,7 +211,7 @@ int main(int argc, char *argv[])
 	}
 
 	printf("Sockets created and binded\n");
-	printf("Starting traceroute...\n\n");
+	
 
 	struct iphdr *hdrip, *icmp_hdrip;
 	struct udphdr *hdrudp;
@@ -229,9 +230,11 @@ int main(int argc, char *argv[])
 	for (k = sizeof(struct iphdr)+sizeof(struct udphdr); k < sizeof(struct iphdr)+sizeof(struct udphdr)+52 ; ++k)
 	{
 		/* code */
-		buffer[k] = 'n';
+		buffer[k] = 'A' + (random() % 26);
 	}
 
+	printf("Payload:\n%s\n", &buffer[sizeof(struct iphdr)+sizeof(udphdr)]);
+	printf("Starting traceroute...\n\n");
 	fd_set rset;
 	clock_t time;
 	double time_taken;
@@ -300,8 +303,12 @@ int main(int argc, char *argv[])
 			len = sizeof(checkaddr);
 			ret = recvfrom(icmpfd, icmp_buffer, 1024, 0, (struct sockaddr*)&checkaddr, &len);
 			icmp_hdrip = (struct iphdr*)icmp_buffer;
-
 			hdricmp = (struct icmphdr*)(icmp_buffer + sizeof(struct iphdr));
+
+			if(icmp_hdrip->protocol == 1)
+			{//icmp packet
+				printf("icmp pcket\n");
+			}
 
 			if(hdricmp->type == 3)
 			{ // DEST_UNREACHABLE
@@ -309,7 +316,7 @@ int main(int argc, char *argv[])
 				// printf("%d %d %d %d \n", checkaddr.sin_family , destaddr.sin_family , checkaddr.sin_port, destaddr.sin_port);
 				if( checkaddr.sin_addr.s_addr == destaddr.sin_addr.s_addr)
 				{// check family, port, sin_addr
-					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
+					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %fms\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken*1000 );
 					printf("Destination reached, %s\n", inet_ntoa(checkaddr.sin_addr));
 					break;
 				}
