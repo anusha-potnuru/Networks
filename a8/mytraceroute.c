@@ -276,9 +276,7 @@ int main(int argc, char *argv[])
 		// start time
 		time = clock();
 		r = select(icmpfd+1, &rset , 0,0, &t);
-		// end time
-		time = clock()-time;
-		time_taken = ((double)time) / CLOCKS_PER_SEC;
+		
 
 		if(r<0 && (errno!=EINTR))
 		{
@@ -288,9 +286,10 @@ int main(int argc, char *argv[])
 		if(r==0)
 		{
 			// printf("timeout\n");
-			printf("Hop_Count(TTL Value) %d, * *\n", hdrip->ttl);
+			
 			if(count==3)
-			{
+			{// if none of the udp packets for this ttl received response
+				printf("Hop_Count(TTL Value) %d, * *\n", hdrip->ttl);
 				ttl++;
 				count=0;
 			}
@@ -302,43 +301,45 @@ int main(int argc, char *argv[])
 		{
 			len = sizeof(checkaddr);
 			ret = recvfrom(icmpfd, icmp_buffer, 1024, 0, (struct sockaddr*)&checkaddr, &len);
+
+			time = clock()-time;
+			time_taken = ((double)time) / CLOCKS_PER_SEC;// in seconds
+			// end time
+
 			icmp_hdrip = (struct iphdr*)icmp_buffer;
 			hdricmp = (struct icmphdr*)(icmp_buffer + sizeof(struct iphdr));
 
 			if(icmp_hdrip->protocol == 1)
 			{//icmp packet
 				printf("icmp pcket\n");
-			}
-
-			if(hdricmp->type == 3)
-			{ // DEST_UNREACHABLE
-				
-				// printf("%d %d %d %d \n", checkaddr.sin_family , destaddr.sin_family , checkaddr.sin_port, destaddr.sin_port);
-				if( checkaddr.sin_addr.s_addr == destaddr.sin_addr.s_addr)
-				{// check family, port, sin_addr
-					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %fms\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken*1000 );
-					printf("Destination reached, %s\n", inet_ntoa(checkaddr.sin_addr));
-					break;
+				if(hdricmp->type == 3)
+				{ // DEST_UNREACHABLE					
+					// printf("%d %d %d %d \n", checkaddr.sin_family , destaddr.sin_family , checkaddr.sin_port, destaddr.sin_port);
+					if( checkaddr.sin_addr.s_addr == destaddr.sin_addr.s_addr)
+					{// check family, port, sin_addr
+						printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %fms\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken*1000 );
+						printf("Destination reached, %s\n", inet_ntoa(checkaddr.sin_addr));
+						break;
+					}
+					else
+					{
+						printf("not reached correct destination\n");
+					}
+					ttl++;
+				}
+				else if(hdricmp->type ==11)
+				{//TIME EXCEEDED
+					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
+					ttl++;
 				}
 				else
 				{
-					printf("not reached correct destination\n");
-				}
-				ttl++;
-			}
-			else if(hdricmp->type ==11)
-			{//TIME EXCEEDED
-				printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
-				ttl++;
-			}
-			else
-			{
-				printf("spurious icmp packet: %d\n", hdricmp->type );
+					printf("spurious icmp packet: %d ignored\n", hdricmp->type );
+				}			
+				// ignore all other types of icmp packets
 			}
 			
-			// ignore all other types of icmp packets
 		}
-
 		
 		hdrip->ttl = ttl;
 	}
