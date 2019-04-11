@@ -224,13 +224,14 @@ int main(int argc, char *argv[])
 	int ttl=1,r, ret, len, usend, k;
 	char buffer[sizeof(struct iphdr)+sizeof(struct udphdr)+52];
 	// char mesg[52];
-	for (k = sizeof(struct iphdr)+sizeof(struct udphdr); k < sizeof(struct iphdr)+sizeof(struct udphdr)+52 ; ++k)
+	for (k = sizeof(struct iphdr)+sizeof(struct udphdr); k < sizeof(struct iphdr)+sizeof(struct udphdr)+51 ; ++k)
 	{
 		/* code */
 		buffer[k] = 'A' + (random() % 26);
 	}
+	buffer[k] = '\0';
 
-	printf("Payload:\n%s\n", &buffer[sizeof(struct iphdr)+sizeof(udphdr)]);
+	printf("Payload:\n%s\n\n", &buffer[sizeof(struct iphdr)+sizeof(struct udphdr)]);
 	printf("Starting traceroute...\n\n");
 	fd_set rset;
 	clock_t time;
@@ -308,13 +309,13 @@ int main(int argc, char *argv[])
 
 			if(icmp_hdrip->protocol == 1)
 			{//icmp packet
-				printf("icmp pcket\n");
+				// printf("icmp pcket\n");
 				if(hdricmp->type == 3)
 				{ // DEST_UNREACHABLE					
 					// printf("%d %d %d %d \n", checkaddr.sin_family , destaddr.sin_family , checkaddr.sin_port, destaddr.sin_port);
 					if( checkaddr.sin_addr.s_addr == destaddr.sin_addr.s_addr)
 					{// check family, port, sin_addr
-						printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %fms\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken*1000 );
+						printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %fms\n\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken*1000 );
 						printf("Destination reached, %s\n", inet_ntoa(checkaddr.sin_addr));
 						break;
 					}
@@ -326,7 +327,7 @@ int main(int argc, char *argv[])
 				}
 				else if(hdricmp->type ==11)
 				{//TIME EXCEEDED
-					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %f\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken );
+					printf("Hop_Count(TTL Value) %d, IP_Address %s Response_time %fms\n", hdrip->ttl , inet_ntoa(checkaddr.sin_addr), time_taken*1000 );
 					ttl++;
 				}
 				else
