@@ -53,38 +53,35 @@ struct iphdr {
 	/*The options start here. 
 };
 
-
 struct udphdr
 __u16 	source
 __u16 	dest
 __u16 	len
 __u16 	check
 
-
 struct sockaddr_in {
                sa_family_t    sin_family; /* address family: AF_INET
                in_port_t      sin_port;   /* port in network byte order 
                struct in_addr sin_addr;   /* internet address 
            };
-
 */
 
 // CHECKSUM for ip
-unsigned short checksum(void *b, int len) 
-{    
-	unsigned short *buf = b; 
-    unsigned int sum=0; 
-    unsigned short result; 
+// unsigned short checksum(void *b, int len) 
+// {    
+// 	unsigned short *buf = b; 
+//     unsigned int sum=0; 
+//     unsigned short result; 
   
-    for ( sum = 0; len > 1; len -= 2 ) 
-        sum += *buf++; 
-    if ( len == 1 ) 
-        sum += *(unsigned char*)buf; 
-    sum = (sum >> 16) + (sum & 0xFFFF); 
-    sum += (sum >> 16); 
-    result = ~sum; 
-    return result; 
-} 
+//     for ( sum = 0; len > 1; len -= 2 ) 
+//         sum += *buf++; 
+//     if ( len == 1 ) 
+//         sum += *(unsigned char*)buf; 
+//     sum = (sum >> 16) + (sum & 0xFFFF); 
+//     sum += (sum >> 16); 
+//     result = ~sum; 
+//     return result; 
+// } 
 
 uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_t dest_addr)
 {
@@ -93,7 +90,7 @@ uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_
 	uint32_t sum;
 	size_t length=len;
 
-	// Calculate the sum                                            //
+	// Calculate the sum 
 	sum = 0;
 	while (len > 1)
 	{
@@ -104,10 +101,10 @@ uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_
 	}
 
 	if ( len & 1 )
-	// Add the padding if the packet length is odd          //
+	// Add the padding if the packet length is odd
 	    sum += *((uint8_t *)buf);
 
-	// Add the pseudo-header                                        //
+	// Add the pseudo-header 
 	sum += *(ip_src++);
 	sum += *ip_src;
 
@@ -117,11 +114,11 @@ uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_
 	sum += htons(IPPROTO_UDP);
 	sum += htons(length);
 
-	// Add the carries                                              //
+	// Add the carries 
 	while (sum >> 16)
 	     sum = (sum & 0xFFFF) + (sum >> 16);
 
-	// Return the one's complement of sum                           //
+	// Return the one's complement of sum
 	return ( (uint16_t)(~sum)  );
 }
 
